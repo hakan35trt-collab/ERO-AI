@@ -54,10 +54,11 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
       });
     });
     const check = () => registration.update().catch(() => {});
+    check();
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") check();
     });
-    setInterval(check, 30 * 60 * 1000);
+    setInterval(check, 60 * 1000);
   }).catch(() => {});
 }
 

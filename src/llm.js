@@ -52,6 +52,14 @@ export const KEYLESS_PROVIDERS = [
   },
 ];
 
+function providerHost(provider) {
+  try {
+    return new URL(provider.url || "https://text.pollinations.ai/").host;
+  } catch {
+    return provider.id || "";
+  }
+}
+
 function completionsUrl(base) {
   const trimmed = String(base || "").trim().replace(/\/$/, "");
   if (!trimmed) return "";
@@ -245,10 +253,13 @@ export async function streamChat({ messages, settings = {}, onDelta, signal, onS
   chain.push(...KEYLESS_PROVIDERS);
 
   let lastError = null;
+  const skippedHosts = new Set();
   for (const provider of chain) {
     if (signal?.aborted) throw new DOMException("iptal", "AbortError");
+    const host = providerHost(provider);
+    if (skippedHosts.has(host)) continue;
     const attempt = async () => {
-      onStatus?.(`${provider.label}`);
+      onStatus?.("Düşünüyorum…");
       await runProvider(provider, messages, onDelta, signal);
       return { id: provider.id, label: provider.label, model: provider.model };
     };
@@ -258,13 +269,16 @@ export async function streamChat({ messages, settings = {}, onDelta, signal, onS
       if (error?.name === "AbortError") throw error;
       if (error?.partial) throw error;
       lastError = error;
-      if (error?.status === 402 || error?.status === 429) {
-        const wait = Math.min(Math.max(Number(error.retryAfter || 6), 1), 12);
-        onStatus?.("Ücretsiz hat meşgul, diğer yola geçiyorum…");
-        try {
-          await sleep(Math.min(wait, 4) * 1000, signal);
-        } catch (abort) {
-          throw abort;
+      const quota = error?.status === 402 || error?.status === 429;
+      if (quota) {
+        onStatus?.("Ücretsiz hat dolu, başka yoldan deniyorum…");
+        if (Number(error.retryAfter || 0) > 15) skippedHosts.add(host);
+        else {
+          try {
+            await sleep(1200, signal);
+          } catch (abort) {
+            throw abort;
+          }
         }
       }
     }

@@ -72,6 +72,10 @@ export function mount(doc, hooks = {}) {
   let pushActive = false;
   let followUntil = 0;
   let silenceTimer = 0;
+  let silenceText = "";
+  let deafTimer = 0;
+  let lastSubmit = "";
+  let lastSubmitAt = 0;
   let chatAbort = null;
   let turn = 0;
   let allowEmotion = true;
@@ -84,7 +88,9 @@ export function mount(doc, hooks = {}) {
     onInterim: (text) => {
       if (doc.activeElement === $("text") && $("text").dataset.dictated !== "1" && $("text").value.trim()) return;
       $("text").dataset.dictated = "1";
-      $("text").value = mergeTranscript($("text").value, text);
+      const next = mergeTranscript($("text").value, text);
+      if (next === $("text").value.trim()) return;
+      $("text").value = next;
       armSilence();
     },
     onFinal: (text) => heard(text),
@@ -102,6 +108,11 @@ export function mount(doc, hooks = {}) {
     onError: (error) => {
       if (error.code === "not-allowed") toast(error.message);
       else if (error.code !== "unsupported") $("substatus").textContent = error.message;
+    },
+    onTtsFallback: () => {
+      const current = $("substatus").textContent || "";
+      if (/hat|ulaş|bağlan|duyamad/i.test(current)) return;
+      $("substatus").textContent = "Yanıt yazıda. Bu cihazda ses çıkmadı.";
     },
   });
 
@@ -181,14 +192,18 @@ export function mount(doc, hooks = {}) {
   }
 
   function armSilence() {
+    const text = $("text").value.trim();
+    if (!pushActive || !text) return;
+    if (text === silenceText) return;
+    silenceText = text;
     clearTimeout(silenceTimer);
-    if (!pushActive) return;
     silenceTimer = setTimeout(() => {
-      const text = $("text").value.trim();
-      if (!pushActive || !text) return;
+      const current = $("text").value.trim();
+      if (!pushActive || !current) return;
+      silenceText = "";
       endListen();
-      submit(text);
-    }, 1300);
+      submit(current);
+    }, 900);
   }
 
   async function beginListen(push) {
@@ -196,8 +211,14 @@ export function mount(doc, hooks = {}) {
     pushActive = push;
     const ok = await voice.start({ handsFree: settings.handsFree || push });
     activity = "listen";
-    $("substatus").textContent = settings.handsFree && !push ? "Eller serbest. ERO diyebilirsin." : "Dinliyorum…";
+    $("substatus").textContent = settings.handsFree && !push ? "Eller serbest. ERO diyebilirsin." : "Dinliyorum… Cümleden sonra kısa bir ara ver.";
     syncFace();
+    clearTimeout(deafTimer);
+    deafTimer = setTimeout(() => {
+      if (activity !== "listen") return;
+      if ($("text").value.trim()) return;
+      $("substatus").textContent = "Seni duyamadım. Tekrar söyleyip kısa bir ara ver.";
+    }, 7000);
     if (!ok) {
       $("support").hidden = false;
       $("support").textContent = "Bu tarayıcı sesi metne çeviremiyor. Chrome veya Android'de mikrofon çalışır; yazarak da konuşabiliriz.";
@@ -206,7 +227,9 @@ export function mount(doc, hooks = {}) {
 
   function endListen() {
     pushActive = false;
+    silenceText = "";
     clearTimeout(silenceTimer);
+    clearTimeout(deafTimer);
     if (!settings.handsFree) {
       voice.stop();
       if (activity === "listen") activity = "idle";
@@ -469,6 +492,9 @@ export function mount(doc, hooks = {}) {
   async function submit(raw) {
     const text = String(raw || "").trim();
     if (!text) return;
+    if (text === lastSubmit && Date.now() - lastSubmitAt < 2500) return;
+    lastSubmit = text;
+    lastSubmitAt = Date.now();
     turn += 1;
     const token = turn;
     if (lockedMode) {
@@ -611,7 +637,7 @@ export function mount(doc, hooks = {}) {
         render();
         return;
       }
-      const apology = "Şu an modele ulaşamadım. Biraz sonra yeniden dene; yazışma duruyor.";
+      const apology = explainFailure(error);
       if (bubble.text.trim()) {
         bubble.pending = false;
         bubble.text = `${sanitizeFinal(bubble.text).spoken}\n\nYanıt yarım kaldı.`;
@@ -630,7 +656,8 @@ export function mount(doc, hooks = {}) {
       activity = "idle";
       emotion = "sad";
       emotionUntil = Date.now() + 3000;
-      $("substatus").textContent = "Bağlantı kurulamadı.";
+      $("substatus").textContent = apology;
+      voice.speak(apology, "chat");
       syncFace();
     }
   }
@@ -764,6 +791,7 @@ export function mount(doc, hooks = {}) {
     messages = [];
     render();
   });
+  doc.addEventListener("pointerdown", () => voice.unlock(), { once: true });
   $("mic").addEventListener("click", async () => {
     voice.unlock();
     if (voice.isSpeaking()) {
@@ -827,6 +855,15 @@ export function mount(doc, hooks = {}) {
     isSpeaking: () => voice.isSpeaking(),
     submit,
   };
+}
+
+function explainFailure(error) {
+  const status = Number(error?.status || 0);
+  if (status === 429 || status === 402) return "Ücretsiz hat şu an dolu. Biraz sonra yeniden dene.";
+  if (error?.name === "TypeError" || /failed to fetch|network|cors/i.test(String(error?.message || ""))) {
+    return "Modele bağlanılamadı. Bağlantıyı kontrol edip yeniden dene.";
+  }
+  return "Şu an modele ulaşamadım. Biraz sonra yeniden dene.";
 }
 
 function mergeTranscript(current, next) {

@@ -6,7 +6,18 @@ export function rankVoices(voices) {
   return [...voices].sort((a, b) => rankScore(b) - rankScore(a));
 }
 
-export function createVoice({ getSettings, onFinal, onInterim, onVolume, onViseme, onSpeakStart, onSpeakEnd, onError }) {
+export function chooseVoice(voices, voiceURI) {
+  const list = rankVoices(voices || []);
+  const chosen = voiceURI ? list.find((voice) => voice.voiceURI === voiceURI) : null;
+  if (chosen) return chosen;
+  return list.find((voice) => /^tr\b/i.test(voice.lang || "")) || null;
+}
+
+function mobileMic() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+}
+
+export function createVoice({ getSettings, onFinal, onInterim, onVolume, onViseme, onSpeakStart, onSpeakEnd, onError, onTtsFallback }) {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let wantListen = false;
@@ -20,15 +31,32 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
   let songStep = 0;
   let currentText = "";
   let keepAlive = 0;
+  let primed = false;
+  let hypothesis = "";
+  let sent = "";
+  let sentAt = 0;
+  let pauseTimer = 0;
 
   function supported() {
     return Boolean(Recognition);
   }
 
   function unlock() {
-    if (!window.speechSynthesis) return;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
     try {
-      window.speechSynthesis.resume();
+      synth.resume();
+    } catch {
+      /* yoksay */
+    }
+    if (primed) return;
+    primed = true;
+    try {
+      const nudge = new SpeechSynthesisUtterance(" ");
+      nudge.volume = 0;
+      nudge.lang = "tr-TR";
+      nudge.rate = 2;
+      synth.speak(nudge);
     } catch {
       /* yoksay */
     }
@@ -40,14 +68,24 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
   }
 
   function pickVoice() {
-    const list = voices();
-    const chosen = getSettings().voiceURI;
-    return list.find((voice) => voice.voiceURI === chosen) || list[0] || null;
+    return chooseVoice(voices(), getSettings().voiceURI);
+  }
+
+  function deliver(text) {
+    const clean = String(text || "").trim();
+    if (!clean || (clean === sent && Date.now() - sentAt < 1200)) return;
+    sent = clean;
+    sentAt = Date.now();
+    hypothesis = "";
+    clearTimeout(pauseTimer);
+    onFinal?.(clean);
   }
 
   async function start(options = {}) {
     handsFree = Boolean(options.handsFree);
     wantListen = true;
+    sent = "";
+    hypothesis = "";
     if (!Recognition) {
       onError?.({ code: "unsupported", message: "Bu tarayıcı konuşmayı yazıya çeviremiyor." });
       return false;
@@ -56,7 +94,8 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
     if (!recognition) {
       recognition = new Recognition();
       recognition.lang = "tr-TR";
-      recognition.continuous = true;
+      // Android Chrome often never sets isFinal while continuous stays open.
+      recognition.continuous = !mobileMic();
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
       recognition.onresult = (event) => {
@@ -67,8 +106,23 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
           if (event.results[i].isFinal) finalText += piece;
           else interim += piece;
         }
-        if (interim.trim()) onInterim?.(interim.trim());
-        if (finalText.trim()) onFinal?.(finalText.trim());
+        const latest = (finalText || interim).trim();
+        if (!latest) return;
+        hypothesis = latest;
+        onInterim?.(latest);
+        clearTimeout(pauseTimer);
+        if (finalText.trim()) {
+          deliver(finalText);
+          return;
+        }
+        pauseTimer = setTimeout(() => {
+          deliver(hypothesis);
+          try {
+            recognition?.stop();
+          } catch {
+            /* yoksay */
+          }
+        }, 850);
       };
       recognition.onerror = (event) => {
         const code = event.error || "error";
@@ -77,6 +131,8 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
         if (code === "not-allowed" || code === "service-not-allowed") wantListen = false;
       };
       recognition.onend = () => {
+        clearTimeout(pauseTimer);
+        if (hypothesis.trim()) deliver(hypothesis);
         if (!wantListen) return;
         setTimeout(() => {
           if (!wantListen || !recognition) return;
@@ -85,7 +141,7 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
           } catch {
             /* zaten açık */
           }
-        }, 280);
+        }, 350);
       };
     }
     try {
@@ -99,6 +155,8 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
   function stop() {
     wantListen = false;
     handsFree = false;
+    clearTimeout(pauseTimer);
+    hypothesis = "";
     try {
       recognition?.stop();
     } catch {
@@ -113,6 +171,8 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
   }
 
   async function startLevel() {
+    // A second capture beside SpeechRecognition mutes the recognizer on Android.
+    if (mobileMic()) return;
     if (audio || !navigator.mediaDevices?.getUserMedia) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
@@ -206,6 +266,7 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
     let started = false;
     let settled = false;
     let visemeTimer = 0;
+    let waited = 0;
     const finish = () => {
       if (settled || token !== epoch) return;
       settled = true;
@@ -233,9 +294,29 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
       if (typeof event.charIndex === "number") onViseme?.(visemeForChar(item.text[event.charIndex] || " "));
     };
     utterance.onend = finish;
-    utterance.onerror = finish;
+    utterance.onerror = () => {
+      onTtsFallback?.();
+      finish();
+    };
+    try {
+      window.speechSynthesis.resume();
+    } catch {
+      /* yoksay */
+    }
     window.speechSynthesis.speak(utterance);
-    setTimeout(() => {
+    const giveUp = () => {
+      if (token !== epoch || started || settled) return;
+      const synth = window.speechSynthesis;
+      if (synth && (synth.speaking || synth.pending) && waited < 7000) {
+        waited += 1000;
+        try {
+          synth.resume();
+        } catch {
+          /* yoksay */
+        }
+        setTimeout(giveUp, 1000);
+        return;
+      }
       if (token !== epoch || started || settled) return;
       settled = true;
       try {
@@ -243,8 +324,10 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
       } catch {
         /* yoksay */
       }
+      onTtsFallback?.();
       simulate(item, token);
-    }, 1600);
+    };
+    setTimeout(giveUp, 2200);
   }
 
   function simulate(item, token) {
