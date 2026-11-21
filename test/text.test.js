@@ -7,6 +7,9 @@ import {
   explicitMemories,
   extractWake,
   needsResearch,
+  emotionFromText,
+  forSpeech,
+  sanitizeFinal,
   takeSpeakable,
 } from "../src/text.js";
 
@@ -58,6 +61,15 @@ test("cümleleri ses için böler, ondalığı bölmez", () => {
   const number = takeSpeakable("3.14 bir sayıdır.", { flush: true });
   assert.equal(number.sentences.length, 1);
   assert.match(number.sentences[0], /3\.14/);
+});
+
+test("duygu etiketi ekranda ve seste görünmez", () => {
+  const done = sanitizeFinal("[üzgün]\nGeçmiş olsun.");
+  assert.equal(done.spoken, "Geçmiş olsun.");
+  assert.equal(done.emotion, "sad");
+  assert.equal(forSpeech("[mutlu] Harika haber."), "Harika haber.");
+  assert.equal(emotionFromText("[korkmuş] Dikkat."), "fear");
+  assert.equal(emotionFromText("Sakin ol, buradayım."), "calm");
 });
 
 test("şiir, şarkı ve hikâye üslubunu seçer", () => {

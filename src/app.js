@@ -1,876 +1,465 @@
-import { createFace } from "./face.js";
-import { createVoice, isEcho } from "./voice.js";
-import { buildMessages, streamChat } from "./llm.js";
+import { createAvatar } from "./avatar.js";
+import { createConversation } from "./session.js";
 import { createStore, loadSettings, saveSettings } from "./memory.js";
-import { research, sourceLabels } from "./search.js";
-import {
-  createDemoDevices,
-  createHomeAssistant,
-  deviceLabel,
-  parseHomeIntent,
-  runHomeCommand,
-  tuyaAdapter,
-} from "./smarthome.js";
-import {
-  detectDelivery,
-  explicitMemories,
-  extractWake,
-  forSpeech,
-  guessEmotion,
-  needsResearch,
-  sanitizeFinal,
-  StreamCleaner,
-  takeSpeakable,
-} from "./text.js";
+import { KOCAELI, localForecast, research, sourceLabels } from "./search.js";
+import { createDemoDevices, createHomeAssistant, deviceLabel, runHomeCommand } from "./smarthome.js";
+import { emotionFromText, sanitizeFinal } from "./text.js";
+import { createVoice } from "./voice.js";
 
-const STATUS = {
-  idle: "Bekliyor",
-  listen: "Dinliyor",
-  think: "Düşünüyor",
-  speak: "Konuşuyor",
-  happy: "Mutlu",
-  surprised: "Şaşırmış",
-  sad: "Üzgün",
-  curious: "Meraklı",
+const PILL = {
+  idle: ["ERO Hazır", "Seninle konuşmaya hazırım..."],
+  listen: ["Dinliyorum", "Konuşman bitince yanıtlarım."],
+  think: ["Düşünüyorum", "Bir saniye..."],
+  speak: ["Konuşuyorum", "Sözümü kesmek için dokun."],
 };
 
-const FORCED = {
-  bekliyor: "idle",
-  idle: "idle",
-  dinliyor: "listen",
-  listen: "listen",
-  düşünüyor: "think",
-  dusunuyor: "think",
-  think: "think",
-  konuşuyor: "speak",
-  konusuyor: "speak",
-  speak: "speak",
-  mutlu: "happy",
-  happy: "happy",
-  şaşırmış: "surprised",
-  sasirmis: "surprised",
-  surprised: "surprised",
-  üzgün: "sad",
-  uzgun: "sad",
-  sad: "sad",
-  meraklı: "curious",
-  merakli: "curious",
-  curious: "curious",
-};
+const RIDDLES = [
+  { q: "Sabah dört ayağı, öğlen iki ayağı, akşam üç ayağı var. Nedir?", a: "İnsan." },
+  { q: "Kanadı yok uçar, ağzı yok konuşur. Nedir?", a: "Mektup." },
+  { q: "Altı daire, üstü daire, ortası kare. Nedir?", a: "Yüzük." },
+];
+
+const MOOD = { happy: "happy", surprised: "surprised", sad: "sad" };
 
 export function mount(doc, hooks = {}) {
-  const $ = (id) => doc.getElementById(id);
-  const face = createFace($("face"));
   const store = createStore();
   let settings = loadSettings();
-  let messages = [];
   let devices = createDemoDevices();
-  let activity = "idle";
-  let emotion = "neutral";
-  let emotionUntil = 0;
-  let lockedMode = "";
-  let pushActive = false;
-  let followUntil = 0;
-  let silenceTimer = 0;
-  let silenceText = "";
-  let deafTimer = 0;
-  let lastSubmit = "";
-  let lastSubmitAt = 0;
-  let chatAbort = null;
-  let turn = 0;
-  let allowEmotion = true;
-  let pendingEmotion = "neutral";
-  let lastProvider = "";
-  let ha = null;
-
+  let messages = [];
+  let assistant = null;
+  let notes = "";
+  let mood = "";
+  let riddle = 0;
+  let soundOn = true;
+  const avatar = createAvatar(doc.querySelector("#avatar"));
   const voice = createVoice({
     getSettings: () => settings,
-    onInterim: (text) => {
-      if (doc.activeElement === $("text") && $("text").dataset.dictated !== "1" && $("text").value.trim()) return;
-      $("text").dataset.dictated = "1";
-      const next = mergeTranscript($("text").value, text);
-      if (next === $("text").value.trim()) return;
-      $("text").value = next;
-      armSilence();
+    onViseme: (shape) => avatar.setViseme(shape),
+    onSpeakStart: () => hooks.onSpeaking?.(true),
+    onSpeakEnd: () => hooks.onSpeaking?.(false),
+  });
+
+  const session = createConversation({
+    getSettings: () => settings,
+    getHistory: () => messages,
+    getMemories: () => store.memories(),
+    research,
+    onResearch(text) {
+      notes = text;
     },
-    onFinal: (text) => heard(text),
-    onVolume: (value) => face.setVolume(value),
-    onViseme: (value) => face.setViseme(value),
-    onSpeakStart: () => {
-      activity = "speak";
-      syncFace();
+    onState: paintState,
+    onStatus: (text) => toast(text),
+    onLevel: (rms) => {
+      avatar.setLevel(rms);
+      doc.documentElement.style.setProperty("--level", String(Math.min(1, rms * 4)));
     },
-    onSpeakEnd: () => {
-      if (activity === "speak") activity = "idle";
-      if (allowEmotion && pendingEmotion !== "neutral") emotionUntil = Date.now() + 4200;
-      syncFace();
+    onAudio: (level) => avatar.setAudio(level),
+    onUser: addUser,
+    onAssistant: addAssistant,
+    onMemories: async (facts) => {
+      for (const fact of facts) await store.addMemory(fact);
+      toast("Bunu hatırlayacağım.");
+      renderMemories();
     },
-    onError: (error) => {
-      if (error.code === "not-allowed") toast(error.message);
-      else if (error.code !== "unsupported") $("substatus").textContent = error.message;
+    onHome: async (intent) => {
+      let assistantClient = null;
+      if (settings.homeEnabled && settings.haUrl && settings.haToken) {
+        assistantClient = createHomeAssistant({ url: settings.haUrl, token: settings.haToken });
+      }
+      const result = await runHomeCommand({ intent, settings, devices, assistant: assistantClient });
+      devices = result.devices;
+      paintDevices();
+      return result;
     },
-    onTtsFallback: () => {
-      const current = $("substatus").textContent || "";
-      if (/hat|ulaş|bağlan|duyamad/i.test(current)) return;
-      $("substatus").textContent = "Yanıt yazıda. Bu cihazda ses çıkmadı.";
+    speakFallback: (text, style) => {
+      if (!soundOn) return;
+      voice.speak(text, style);
     },
   });
 
-  const params = new URLSearchParams(location.search);
-  const forced = FORCED[(params.get("ifade") || "").toLocaleLowerCase("tr-TR")];
-  if (forced) {
-    lockedMode = forced;
-    face.lockMode(forced);
-    $("status").textContent = STATUS[forced];
-  }
-
   function toast(text) {
-    const el = doc.createElement("div");
-    el.className = "toast";
-    el.textContent = text;
-    $("toasts").append(el);
-    setTimeout(() => el.remove(), 3400);
+    if (!text) return;
+    const node = doc.createElement("p");
+    node.className = "toast";
+    node.textContent = text;
+    doc.querySelector("#toasts").append(node);
+    setTimeout(() => node.remove(), 4200);
   }
 
-  function toastAsk(text, onYes) {
-    const el = doc.createElement("div");
-    el.className = "toast ask";
-    const p = doc.createElement("p");
-    p.textContent = text;
-    const yes = doc.createElement("button");
-    yes.type = "button";
-    yes.textContent = "Evet";
-    const no = doc.createElement("button");
-    no.type = "button";
-    no.textContent = "Şimdi değil";
-    yes.addEventListener("click", () => {
-      el.remove();
-      onYes();
-    });
-    no.addEventListener("click", () => el.remove());
-    el.append(p, yes, no);
-    $("toasts").append(el);
+  function paintState(state) {
+    const pill = doc.querySelector("#pill");
+    const [title, sub] = PILL[state] || PILL.idle;
+    pill.dataset.state = state;
+    doc.querySelector("#pill-title").textContent = title;
+    doc.querySelector("#pill-sub").textContent = state === "idle" && mood === "happy" ? "Bu hoşuma gitti." : sub;
+    avatar.setMode(state === "listen" || state === "think" || state === "speak" ? state : "idle");
+    if (mood) avatar.setEmotion(mood);
+    hooks.onSpeaking?.(state === "speak");
+    const mic = doc.querySelector("#mic");
+    const live = session.active();
+    mic.classList.toggle("on", live);
+    mic.textContent = live ? "Durdur" : "Konuşmayı başlat";
   }
 
-  function emotionMode() {
-    if (Date.now() >= emotionUntil) return "idle";
-    if (emotion === "happy") return "happy";
-    if (emotion === "surprised") return "surprised";
-    if (emotion === "sad") return "sad";
-    if (emotion === "curious") return "curious";
-    return "idle";
-  }
-
-  function syncFace() {
-    hooks.onSpeaking?.(voice.isSpeaking());
-    paintMic();
-    if (lockedMode) {
-      $("status").textContent = STATUS[lockedMode];
-      return;
+  function addUser(text, meta = {}) {
+    const clean = String(text || "").trim();
+    if (!clean) return;
+    const last = messages.at(-1);
+    if (last?.role === "user" && last.partial) {
+      last.text = clean;
+      last.partial = Boolean(meta.partial);
+      if (!last.partial) store.addMessage({ ...last, partial: false });
+    } else {
+      const row = { id: crypto.randomUUID(), role: "user", text: clean, at: Date.now(), partial: Boolean(meta.partial) };
+      messages.push(row);
+      if (!row.partial) store.addMessage(row);
     }
-    const mode = voice.isSpeaking() ? "speak" : activity === "listen" ? "listen" : activity === "think" ? "think" : emotionMode();
-    face.setMode(mode);
-    $("status").textContent = STATUS[mode];
+    assistant = null;
+    renderTranscript();
   }
 
-  function paintMic() {
-    const speaking = voice.isSpeaking();
-    const listening = voice.listening() && (pushActive || settings.handsFree);
-    $("mic").classList.toggle("live", listening && !speaking);
-    $("mic").classList.toggle("stop", speaking);
-    $("mic-label").textContent = speaking ? "Kes" : listening && pushActive ? "Dinliyor" : "Konuş";
-    $("mic").setAttribute("aria-label", speaking ? "ERO'yu durdur" : "Mikrofon");
-  }
-
-  function interrupt() {
-    allowEmotion = false;
-    pendingEmotion = "neutral";
-    chatAbort?.abort();
-    voice.stopSpeaking();
-    if (activity === "speak" || activity === "think") activity = "idle";
-    syncFace();
-  }
-
-  function armSilence() {
-    const text = $("text").value.trim();
-    if (!pushActive || !text) return;
-    if (text === silenceText) return;
-    silenceText = text;
-    clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => {
-      const current = $("text").value.trim();
-      if (!pushActive || !current) return;
-      silenceText = "";
-      endListen();
-      submit(current);
-    }, 900);
-  }
-
-  async function beginListen(push) {
-    voice.unlock();
-    pushActive = push;
-    const ok = await voice.start({ handsFree: settings.handsFree || push });
-    activity = "listen";
-    $("substatus").textContent = settings.handsFree && !push ? "Eller serbest. ERO diyebilirsin." : "Dinliyorum… Cümleden sonra kısa bir ara ver.";
-    syncFace();
-    clearTimeout(deafTimer);
-    deafTimer = setTimeout(() => {
-      if (activity !== "listen") return;
-      if ($("text").value.trim()) return;
-      $("substatus").textContent = "Seni duyamadım. Tekrar söyleyip kısa bir ara ver.";
-    }, 7000);
-    if (!ok) {
-      $("support").hidden = false;
-      $("support").textContent = "Bu tarayıcı sesi metne çeviremiyor. Chrome veya Android'de mikrofon çalışır; yazarak da konuşabiliriz.";
+  function addAssistant(text, meta = {}) {
+    const parsed = sanitizeFinal(text);
+    const clean = parsed.spoken;
+    const feeling = emotionFromText(text) || parsed.emotion || "";
+    if (feeling && feeling !== "neutral") {
+      mood = feeling;
+      avatar.setEmotion(feeling);
     }
+    if (!clean) return;
+    if (!assistant || !assistant.pending) {
+      assistant = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: clean,
+        pending: Boolean(meta.pending),
+        at: Date.now(),
+      };
+      messages.push(assistant);
+    } else {
+      assistant.text = clean;
+      assistant.pending = Boolean(meta.pending);
+    }
+    if (meta.emotion) {
+      mood = meta.emotion;
+      avatar.setEmotion(meta.emotion);
+    }
+    if (!meta.pending) {
+      assistant.pending = false;
+      if (notes) assistant.sources = sourceLabels(notes);
+      store.addMessage({ ...assistant });
+      notes = "";
+      assistant = null;
+    }
+    renderTranscript();
+    if (mood === "happy" || mood === "surprised") avatar.setMode(mood);
   }
 
-  function endListen() {
-    pushActive = false;
-    silenceText = "";
-    clearTimeout(silenceTimer);
-    clearTimeout(deafTimer);
-    if (!settings.handsFree) {
-      voice.stop();
-      if (activity === "listen") activity = "idle";
-    }
-    syncFace();
-  }
-
-  function heard(text) {
-    if (voice.isSpeaking()) {
-      if (isEcho(text, voice.lastSpoken())) return;
-      interrupt();
-    }
-    if (settings.handsFree && !pushActive) {
-      const wake = extractWake(text);
-      const follow = Date.now() < followUntil;
-      if (!wake.wake && !follow) return;
-      const query = wake.wake ? wake.rest : text;
-      if (!query) {
-        followUntil = Date.now() + 8000;
-        allowEmotion = true;
-        pendingEmotion = "curious";
-        voice.speak("Efendim?", "chat");
-        $("substatus").textContent = "Evet, dinliyorum.";
-        return;
+  function renderTranscript() {
+    const root = doc.querySelector("#transcript");
+    root.replaceChildren(...messages.slice(-40).map((entry) => {
+      const node = doc.createElement("p");
+      node.className = `bubble ${entry.role}${entry.pending ? " pending" : ""}`;
+      node.textContent = entry.text;
+      if (entry.sources?.length) {
+        const source = doc.createElement("small");
+        source.textContent = `Kaynak: ${entry.sources.join(", ")}`;
+        node.append(doc.createElement("br"), source);
       }
-      followUntil = 0;
-      submit(query);
-      return;
-    }
-    $("text").dataset.dictated = "1";
-    $("text").value = mergeTranscript($("text").value, text);
-    armSilence();
-  }
-
-  function render() {
-    const box = $("transcript");
-    box.innerHTML = "";
-    if (!messages.length) {
-      const empty = doc.createElement("p");
-      empty.className = "empty";
-      empty.textContent = "Merhaba, ben ERO. Bir şey sor, bir şiir iste ya da sadece sohbet edelim.";
-      box.append(empty);
-      return;
-    }
-    for (const message of messages) {
-      const article = doc.createElement("article");
-      article.className = `bubble ${message.role}${message.pending ? " pending" : ""}`;
-      article.dataset.id = message.id;
-      if (message.via) article.dataset.provider = message.via;
-      const body = doc.createElement("p");
-      body.className = "body";
-      body.textContent = message.text || "…";
-      article.append(body);
-      if (message.source) {
-        const source = doc.createElement("p");
-        source.className = "source";
-        source.textContent = message.source;
-        article.append(source);
-      }
-      if (message.retry) {
-        const retry = doc.createElement("button");
-        retry.type = "button";
-        retry.textContent = "Yeniden dene";
-        retry.addEventListener("click", () => submit(message.retry));
-        article.append(retry);
-      }
-      box.append(article);
-    }
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setBubbleText(bubble, text) {
-    bubble.text = text;
-    const node = $("transcript").querySelector(`[data-id="${bubble.id}"] .body`);
-    if (node) node.textContent = text || "…";
-    else render();
-    $("transcript").scrollTop = $("transcript").scrollHeight;
-  }
-
-  async function persist(message) {
-    await store.addMessage({
-      id: message.id,
-      role: message.role,
-      text: message.text,
-      at: message.at,
-      source: message.source || "",
-      via: message.via || "",
-    });
-    await store.trimMessages(200);
-  }
-
-  async function remember(fact, quiet) {
-    const existing = await store.memories();
-    const key = fact.toLocaleLowerCase("tr-TR");
-    if (existing.some((item) => item.text.toLocaleLowerCase("tr-TR") === key)) return;
-    await store.addMemory(fact);
-    if (!quiet) toast("Hatırladım.");
-    renderMemories();
+      return node;
+    }));
+    root.scrollTop = root.scrollHeight;
   }
 
   async function renderMemories() {
-    const list = $("memory-list");
+    const list = doc.querySelector("#memory-list");
     const rows = await store.memories();
-    list.innerHTML = "";
-    if (!rows.length) {
-      const empty = doc.createElement("p");
-      empty.className = "hint";
-      empty.textContent = "Henüz bir anı yok. Sohbette “bunu hatırla” diyebilirsin.";
-      list.append(empty);
-      return;
-    }
-    for (const row of rows) {
-      const item = doc.createElement("div");
-      item.className = "memory-item";
-      const text = doc.createElement("span");
-      text.textContent = row.text;
-      const del = doc.createElement("button");
-      del.type = "button";
-      del.textContent = "Sil";
-      del.addEventListener("click", async () => {
+    list.replaceChildren(...rows.map((row) => {
+      const item = doc.createElement("li");
+      item.textContent = row.text;
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.textContent = "Sil";
+      button.addEventListener("click", async () => {
         await store.deleteMemory(row.id);
         renderMemories();
       });
-      item.append(text, del);
+      item.append(button);
+      return item;
+    }));
+    if (!rows.length) {
+      const item = doc.createElement("li");
+      item.textContent = "Henüz bir anı yok. “Bunu hatırla” diyebilirsin.";
       list.append(item);
     }
   }
 
-  function renderDevices() {
-    const box = $("devices");
-    box.innerHTML = "";
-    if (settings.homeDemo) $("home-note").textContent = "Simülasyon açık. Komutlar ve düğmeler bu cihazları değiştirir.";
-    else if (settings.homeEnabled && settings.homeAdapter === "tuya") $("home-note").textContent = "Tuya bağdaştırıcısı hazır, henüz bağlı değil.";
-    else if (homeReady()) $("home-note").textContent = "Home Assistant bağlantısı açık.";
-    else $("home-note").textContent = "Modül kapalı. Ayarlardan simülasyonu veya Home Assistant’ı açabilirsin.";
-    for (const device of devices) {
-      const button = doc.createElement("button");
-      button.type = "button";
-      button.className = `device ${device.state === "on" || device.state === "open" ? "on" : ""}`;
-      const copy = doc.createElement("span");
-      const name = doc.createElement("strong");
-      name.textContent = device.name;
-      const state = doc.createElement("small");
-      state.textContent = ` ${deviceLabel(device)}`;
-      copy.append(name, state);
-      button.append(copy);
-      if (device.domain === "climate") {
-        const temp = doc.createElement("span");
-        temp.className = "temp";
-        for (const step of [-1, 1]) {
-          const knob = doc.createElement("button");
-          knob.type = "button";
-          knob.textContent = step < 0 ? "−" : "+";
-          knob.addEventListener("click", (event) => {
-            event.stopPropagation();
-            changeTemp(device, step);
-          });
-          temp.append(knob);
-        }
-        button.append(temp);
-      }
-      button.addEventListener("click", () => toggleDevice(device));
-      box.append(button);
+  function paintDevices() {
+    const on = (domain) => devices.some((item) => item.domain === domain && item.state === "on");
+    for (const button of doc.querySelectorAll("[data-tile]")) {
+      const tile = button.dataset.tile;
+      const active = tile === "lights" ? on("light")
+        : tile === "climate" ? on("climate")
+          : tile === "tv" ? on("media_player")
+            : tile === "music" ? on("music")
+              : tile === "security" ? on("security")
+                : false;
+      button.classList.toggle("on", active);
     }
+    const list = doc.querySelector("#device-list");
+    list.replaceChildren(...devices.map((device) => {
+      const item = doc.createElement("li");
+      item.textContent = `${device.name}: ${deviceLabel(device)}`;
+      return item;
+    }));
   }
 
-  function homeReady() {
-    return Boolean(settings.homeEnabled && settings.homeAdapter === "homeassistant" && settings.haUrl && settings.haToken);
+  function toggleTile(tile) {
+    const flip = (device) => ({ ...device, state: device.state === "on" ? "off" : "on" });
+    if (tile === "lights") devices = devices.map((device) => device.domain === "light" ? flip(device) : device);
+    if (tile === "climate") devices = devices.map((device) => device.domain === "climate" ? flip(device) : device);
+    if (tile === "tv") devices = devices.map((device) => device.domain === "media_player" ? flip(device) : device);
+    if (tile === "music") devices = devices.map((device) => device.domain === "music" ? flip(device) : device);
+    if (tile === "security") devices = devices.map((device) => device.domain === "security" ? flip(device) : device);
+    paintDevices();
+    const names = { lights: "Işıklar", climate: "Klima", tv: "Televizyon", music: "Müzik", security: "Güvenlik" };
+    toast(`${names[tile]} ${devices.some((item) => item.state === "on" && (
+      (tile === "lights" && item.domain === "light")
+      || (tile === "climate" && item.domain === "climate")
+      || (tile === "tv" && item.domain === "media_player")
+      || (tile === "music" && item.domain === "music")
+      || (tile === "security" && item.domain === "security")
+    )) ? "açık" : "kapalı"}.`);
   }
 
-  function ensureHa() {
-    if (!homeReady()) return null;
-    if (!ha) {
-      ha = createHomeAssistant({
-        url: settings.haUrl,
-        token: settings.haToken,
-        onState: () => refreshHome(),
+  function openSheet(id) {
+    for (const sheet of doc.querySelectorAll(".sheet")) sheet.hidden = sheet.id !== id;
+    doc.querySelectorAll(".rail button").forEach((button) => {
+      button.classList.toggle("on", button.dataset.panel === id.replace("sheet-", ""));
+    });
+  }
+
+  function closeSheets() {
+    for (const sheet of doc.querySelectorAll(".sheet")) sheet.hidden = true;
+    doc.querySelectorAll(".rail button").forEach((button) => button.classList.toggle("on", button.dataset.panel === "home"));
+  }
+
+  function showRiddle() {
+    const item = RIDDLES[riddle % RIDDLES.length];
+    doc.querySelector("#riddle").textContent = item.q;
+  }
+
+  async function loadWeather() {
+    let place = KOCAELI;
+    try {
+      const position = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) reject(new Error("konum yok"));
+        else navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 4000, maximumAge: 900000 });
       });
-      ha.connect();
-    }
-    return ha;
-  }
-
-  async function refreshHome() {
-    if (homeReady()) {
+      let name = "Buradasın";
       try {
-        devices = await ensureHa().listDevices();
-      } catch (error) {
-        $("home-note").textContent = error.message;
+        const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&language=tr&count=1`);
+        const data = await geo.json();
+        name = data.results?.[0]?.name || name;
+      } catch {
+        name = "Buradasın";
       }
-    } else if (!settings.homeDemo) {
-      devices = createDemoDevices();
-    }
-    renderDevices();
-  }
-
-  async function toggleDevice(device) {
-    if (!settings.homeDemo && !homeReady()) {
-      toast("Simülasyon veya bağlantı kapalı.");
-      return;
-    }
-    if (settings.homeDemo && !homeReady()) {
-      devices = devices.map((item) => {
-        if (item.id !== device.id) return item;
-        if (item.domain === "cover") {
-          const position = item.position > 0 ? 0 : 100;
-          return { ...item, position, state: position ? "open" : "closed" };
-        }
-        const on = item.state === "on" || item.state === "open";
-        return { ...item, state: on ? "off" : "on" };
-      });
-      renderDevices();
-      return;
-    }
-    const open = device.state === "on" || device.state === "open";
-    const service = device.domain === "cover" ? (open ? "close_cover" : "open_cover") : open ? "turn_off" : "turn_on";
-    try {
-      await ensureHa().call(device.domain, service, { entity_id: device.id });
-      await refreshHome();
-    } catch (error) {
-      toast(error.message);
-    }
-  }
-
-  async function changeTemp(device, step) {
-    const temperature = Math.max(16, Math.min(32, (device.temperature || 24) + step));
-    if (settings.homeDemo && !homeReady()) {
-      devices = devices.map((item) => (item.id === device.id ? { ...item, temperature, state: "on" } : item));
-      renderDevices();
-      return;
-    }
-    if (!homeReady()) {
-      toast("Simülasyon veya bağlantı kapalı.");
-      return;
+      place = { latitude: position.coords.latitude, longitude: position.coords.longitude, name };
+    } catch {
+      place = KOCAELI;
     }
     try {
-      await ensureHa().call("climate", "set_temperature", { entity_id: device.id, temperature });
-      await refreshHome();
-    } catch (error) {
-      toast(error.message);
+      const forecast = await localForecast(place);
+      if (!forecast) return;
+      doc.querySelector("#weather-city").textContent = forecast.name;
+      doc.querySelector("#weather-temp").textContent = `${forecast.temp}°`;
+      doc.querySelector("#weather-sky").textContent = forecast.sky;
+    } catch {
+      doc.querySelector("#weather-sky").textContent = "hava alınamadı";
     }
   }
 
-  function speakLocal(text, mood = "neutral") {
-    const message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      text,
-      at: Date.now(),
-    };
-    messages.push(message);
-    render();
-    persist(message);
-    allowEmotion = true;
-    pendingEmotion = mood;
-    emotion = mood;
-    voice.speak(text, "chat");
+  function tickClock() {
+    const now = new Date();
+    doc.querySelector("#clock-time").textContent = now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    doc.querySelector("#clock-date").textContent = now.toLocaleDateString("tr-TR", { weekday: "short", day: "numeric", month: "short" });
   }
 
-  async function submit(raw) {
-    const text = String(raw || "").trim();
-    if (!text) return;
-    if (text === lastSubmit && Date.now() - lastSubmitAt < 2500) return;
-    lastSubmit = text;
-    lastSubmitAt = Date.now();
-    turn += 1;
-    const token = turn;
-    if (lockedMode) {
-      lockedMode = "";
-      face.unlock();
+  function showGate() {
+    doc.querySelector("#gate").hidden = Boolean(settings.geminiKey || settings.geminiSkipped);
+  }
+
+  doc.querySelector("#gate-save").addEventListener("click", () => {
+    const key = doc.querySelector("#gate-key").value.trim();
+    if (!key) {
+      toast("Anahtarı yapıştır, sonra kaydet.");
+      return;
     }
+    settings = { ...settings, geminiKey: key, geminiSkipped: false };
+    saveSettings(settings);
+    doc.querySelector("#gate-key").value = "";
+    showGate();
+    toast("Anahtar bu telefonda kaldı. Konuşmayı başlatabilirsin.");
+  });
+  doc.querySelector("#gate-skip").addEventListener("click", () => {
+    settings = { ...settings, geminiSkipped: true };
+    saveSettings(settings);
+    showGate();
+    toast("Anahtarsız yedek hat açık. Ses, cihazın kendi sesi olur.");
+  });
+
+  doc.querySelector("#btn-menu").addEventListener("click", () => {
+    doc.querySelector(".phone").classList.toggle("menu");
+    closeSheets();
+  });
+  doc.querySelector("#btn-bell").addEventListener("click", () => toast("Şu an yeni bildirim yok."));
+  doc.querySelector("#btn-power").addEventListener("click", () => {
+    session.stop();
+    voice.stopSpeaking();
+    paintState("idle");
+    toast("ERO uyudu.");
+  });
+  doc.querySelector("#mic").addEventListener("click", async () => {
     voice.unlock();
-    interrupt();
-    allowEmotion = true;
-    $("text").value = "";
-    delete $("text").dataset.dictated;
-    const user = { id: crypto.randomUUID(), role: "user", text, at: Date.now() };
-    messages.push(user);
-    render();
-    persist(user);
-
-    const memory = explicitMemories(text);
-    for (const fact of memory.facts) await remember(fact, true);
-    if (token !== turn) return;
-    let conversational = memory.facts.length ? memory.remainder : text;
-    if (memory.facts.length && !conversational) {
-      speakLocal(memory.facts.length === 1 ? `Tamam, şunu hatırlayacağım: ${memory.facts[0]}` : "Tamam, bunları hatırlayacağım.", "happy");
+    if (session.active()) {
+      session.stop();
+      paintState("idle");
       return;
     }
-    if (memory.facts.length) toast("Bunu hatırladım.");
+    const ok = await session.start();
+    if (!ok) paintState("idle");
+  });
+  doc.querySelector("#btn-key").addEventListener("click", () => {
+    openSheet("sheet-chat");
+    doc.querySelector("#prompt").focus();
+  });
+  doc.querySelector("#btn-wave").addEventListener("click", () => {
+    soundOn = !soundOn;
+    session.setMuted(!soundOn);
+    doc.body.classList.toggle("wave-off", !soundOn);
+    doc.querySelector("#btn-wave").setAttribute("aria-pressed", soundOn ? "true" : "false");
+    toast(soundOn ? "Ses açık." : "Ses kapalı. ERO yazmaya devam eder.");
+  });
 
-    const intent = parseHomeIntent(conversational);
-    if (intent.matched) {
-      try {
-        const result = await runHomeCommand({
-          intent,
-          settings,
-          devices,
-          assistant: ensureHa(),
-        });
-        devices = result.devices?.length ? result.devices : devices;
-        if (result.demo || result.live) $("home-panel").hidden = false;
-        renderDevices();
-        speakLocal(result.confirm, result.ok === false ? "sad" : "happy");
-      } catch (error) {
-        speakLocal(`Akıllı ev komutu ulaşmadı. ${error.message}`, "sad");
-      }
-      if (!intent.remainder || token !== turn) return;
-      conversational = intent.remainder;
-    }
-
-    if (!navigator.onLine) {
-      speakLocal("Çevrimdışıyım. Bağlantı gelince yeniden dener misin?", "sad");
-      return;
-    }
-
-    activity = "think";
-    $("substatus").textContent = "Düşünüyorum…";
-    syncFace();
-    let notes = "";
-    if (needsResearch(conversational)) {
-      $("substatus").textContent = "Bakınıyorum…";
-      notes = await research(conversational);
-    }
-    if (token !== turn) return;
-    const memories = (await store.memories()).map((item) => item.text);
-    const history = messages.filter((item) => !item.pending && item.role !== "error");
-    const payload = buildMessages({ history, memories, notes });
-    const cleaner = new StreamCleaner();
-    const style = detectDelivery(conversational);
-    let acc = "";
-    let buf = "";
-    const sayReady = (flush) => {
-      const taken = takeSpeakable(buf, { flush });
-      buf = taken.rest;
-      for (const sentence of taken.sentences) {
-        const clean = forSpeech(sentence);
-        if (!clean || token !== turn) continue;
-        allowEmotion = true;
-        activity = "speak";
-        syncFace();
-        voice.speak(clean, style);
-      }
-    };
-    const bubble = { id: crypto.randomUUID(), role: "assistant", text: "", at: Date.now(), pending: true };
-    messages.push(bubble);
-    render();
-    chatAbort = new AbortController();
-    const signal = chatAbort.signal;
-    try {
-      const provider = await streamChat({
-        messages: payload,
-        settings,
-        signal,
-        onStatus: (label) => {
-          if (token === turn) $("substatus").textContent = label;
-        },
-        onDelta: (delta) => {
-          if (token !== turn) return;
-          const visible = cleaner.push(delta);
-          if (!visible) return;
-          acc += visible;
-          buf += visible;
-          setBubbleText(bubble, acc);
-          sayReady(false);
-        },
-      });
-      if (token !== turn) return;
-      const fin = cleaner.finish();
-      if (fin.rest) {
-        acc += fin.rest;
-        buf += fin.rest;
-      }
-      const cleaned = sanitizeFinal(acc);
-      acc = cleaned.spoken.trim();
-      if (!acc) throw new Error("Yanıt boş geldi.");
-      setBubbleText(bubble, acc);
-      sayReady(true);
-      pendingEmotion = fin.emotion || cleaned.emotion || guessEmotion(acc);
-      emotion = pendingEmotion;
-      lastProvider = provider?.label || "";
-      const sources = sourceLabels(notes);
-      bubble.pending = false;
-      bubble.text = acc;
-      bubble.via = lastProvider;
-      bubble.source = sources.length ? `Kaynak: ${sources.join(", ")}` : "";
-      render();
-      persist(bubble);
-      $("substatus").textContent = settings.handsFree ? "Eller serbest açık" : "";
-      for (const fact of [...fin.memories, ...cleaned.memories]) {
-        toastAsk(`Şunu hatırlamamı ister misin? ${fact}`, () => remember(fact));
-      }
-    } catch (error) {
-      if (token !== turn) {
-        if (bubble.pending && !bubble.text.trim()) messages = messages.filter((item) => item !== bubble);
-        else bubble.pending = false;
-        render();
-        return;
-      }
-      if (error?.name === "AbortError") {
-        if (bubble.text.trim()) {
-          bubble.pending = false;
-          persist(bubble);
-        } else messages = messages.filter((item) => item !== bubble);
-        render();
-        return;
-      }
-      const apology = explainFailure(error);
-      if (bubble.text.trim()) {
-        bubble.pending = false;
-        bubble.text = `${sanitizeFinal(bubble.text).spoken}\n\nYanıt yarım kaldı.`;
-        persist(bubble);
-      } else {
-        messages = messages.filter((item) => item !== bubble);
-        messages.push({
-          id: crypto.randomUUID(),
-          role: "error",
-          text: apology,
-          at: Date.now(),
-          retry: text,
-        });
-      }
-      render();
-      activity = "idle";
-      emotion = "sad";
-      emotionUntil = Date.now() + 3000;
-      $("substatus").textContent = apology;
-      voice.speak(apology, "chat");
-      syncFace();
-    }
-  }
-
-  function fillSettings() {
-    $("opt-hands").checked = settings.handsFree;
-    $("opt-rate").value = settings.rate;
-    $("opt-pitch").value = settings.pitch;
-    $("opt-base").value = settings.customBase;
-    $("opt-model").value = settings.customModel;
-    $("opt-key").value = settings.customKey;
-    $("opt-home").checked = settings.homeEnabled;
-    $("opt-demo").checked = settings.homeDemo;
-    $("opt-adapter").value = settings.homeAdapter;
-    $("opt-ha-url").value = settings.haUrl;
-    $("opt-ha-token").value = settings.haToken;
-    fillVoices();
-  }
-
-  function fillVoices() {
-    const select = $("opt-voice");
-    const list = voice.voices();
-    const current = select.value || settings.voiceURI;
-    select.innerHTML = "";
-    if (!list.length) {
-      const option = doc.createElement("option");
-      option.textContent = "Ses listesi henüz gelmedi";
-      select.append(option);
-      return;
-    }
-    for (const item of list) {
-      const option = doc.createElement("option");
-      option.value = item.voiceURI;
-      option.textContent = `${item.name} (${item.lang || "?"})`;
-      select.append(option);
-    }
-    const turkish = list.some((item) => String(item.lang || "").toLowerCase().startsWith("tr"));
-    $("voice-note").textContent = turkish
-      ? "Türkçe ses seçiliyse ERO onunla konuşur."
-      : "Bu cihazda Türkçe ses görünmüyor. ERO yine de konuşmayı dener; Chrome ve Android’de seçenekler artar.";
-    if (current && [...select.options].some((option) => option.value === current)) select.value = current;
-    else if (list[0]) select.value = list[0].voiceURI;
-  }
-
-  function readSettings() {
-    const previous = `${settings.haUrl}|${settings.haToken}`;
+  doc.querySelector("#composer").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = doc.querySelector("#prompt");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    voice.unlock();
+    session.ask(text);
+  });
+  doc.querySelector("#memory-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = doc.querySelector("#memory-input");
+    const text = input.value.trim();
+    if (!text) return;
+    await store.addMemory(text);
+    input.value = "";
+    renderMemories();
+  });
+  doc.querySelector("#settings-form").addEventListener("submit", (event) => {
+    event.preventDefault();
     settings = {
       ...settings,
-      handsFree: $("opt-hands").checked,
-      rate: Number($("opt-rate").value),
-      pitch: Number($("opt-pitch").value),
-      voiceURI: $("opt-voice").value || "",
-      customBase: $("opt-base").value.trim(),
-      customModel: $("opt-model").value.trim(),
-      customKey: $("opt-key").value.trim(),
-      homeEnabled: $("opt-home").checked,
-      homeDemo: $("opt-demo").checked,
-      homeAdapter: $("opt-adapter").value,
-      haUrl: $("opt-ha-url").value.trim(),
-      haToken: $("opt-ha-token").value.trim(),
+      geminiKey: doc.querySelector("#set-gemini").value.trim(),
+      geminiSkipped: !doc.querySelector("#set-gemini").value.trim() && settings.geminiSkipped,
+      wakeWord: doc.querySelector("#set-wake").checked,
+      homeEnabled: doc.querySelector("#set-home").checked,
+      homeDemo: true,
+      haUrl: doc.querySelector("#set-ha").value.trim(),
+      haToken: doc.querySelector("#set-token").value.trim(),
     };
     saveSettings(settings);
-    if (`${settings.haUrl}|${settings.haToken}` !== previous) {
-      ha?.close();
-      ha = null;
-    }
-    if (settings.handsFree && !voice.listening()) beginListen(false);
-    if (!settings.handsFree && voice.listening() && !pushActive) voice.stop();
-    if (!settings.homeDemo && !homeReady()) devices = createDemoDevices();
-    renderDevices();
-    syncFace();
-    $("substatus").textContent = settings.handsFree ? "Eller serbest açık" : $("substatus").textContent;
-  }
-
-  $("btn-settings").addEventListener("click", () => {
-    fillSettings();
-    renderMemories();
-    $("settings").hidden = false;
+    showGate();
+    toast("Ayarlar bu cihazda duruyor.");
+    closeSheets();
   });
-  $("btn-home").addEventListener("click", () => {
-    $("home-panel").hidden = false;
-    refreshHome();
-  });
-  doc.querySelectorAll("[data-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      $(button.dataset.close).hidden = true;
-    });
-  });
-  doc.querySelectorAll(".sheet").forEach((sheet) => {
-    sheet.addEventListener("click", (event) => {
-      if (event.target === sheet) sheet.hidden = true;
-    });
-  });
-  doc.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      $("settings").hidden = true;
-      $("home-panel").hidden = true;
-    }
-  });
-  ["opt-hands", "opt-rate", "opt-pitch", "opt-voice", "opt-base", "opt-model", "opt-key", "opt-home", "opt-demo", "opt-adapter", "opt-ha-url", "opt-ha-token"].forEach((id) => {
-    $(id).addEventListener("change", readSettings);
-  });
-  $("opt-ha-test").addEventListener("click", async () => {
-    readSettings();
+  doc.querySelector("#ha-test").addEventListener("click", async () => {
     try {
-      if (settings.homeAdapter === "tuya") {
-        await tuyaAdapter.test();
-      } else {
-        const client = createHomeAssistant({ url: settings.haUrl, token: settings.haToken });
-        await client.test();
-        $("ha-result").textContent = "Home Assistant yanıt verdi.";
+      await createHomeAssistant({
+        url: doc.querySelector("#set-ha").value.trim(),
+        token: doc.querySelector("#set-token").value.trim(),
+      }).test();
+      toast("Home Assistant yanıt verdi.");
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  doc.querySelector("#clear-chat").addEventListener("click", async () => {
+    messages = [];
+    assistant = null;
+    await store.clearMessages();
+    renderTranscript();
+    toast("Sohbet silindi.");
+  });
+
+  for (const button of doc.querySelectorAll("[data-close]")) {
+    button.addEventListener("click", closeSheets);
+  }
+  for (const button of doc.querySelectorAll(".rail button")) {
+    button.addEventListener("click", () => {
+      const panel = button.dataset.panel;
+      if (panel === "home") {
+        closeSheets();
         return;
       }
-    } catch (error) {
-      $("ha-result").textContent = error.message;
-    }
+      if (panel === "games") showRiddle();
+      if (panel === "layers") renderMemories();
+      openSheet(`sheet-${panel}`);
+    });
+  }
+  doc.querySelector("#riddle-next").addEventListener("click", () => {
+    riddle += 1;
+    showRiddle();
   });
-  $("memory-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const value = $("memory-text").value.trim();
-    if (!value) return;
-    await remember(value);
-    $("memory-text").value = "";
-  });
-  $("memory-clear").addEventListener("click", async () => {
-    await store.clearMemories();
-    renderMemories();
-  });
-  $("clear-chat").addEventListener("click", async () => {
-    await store.clearMessages();
-    messages = [];
-    render();
-  });
-  doc.addEventListener("pointerdown", () => voice.unlock(), { once: true });
-  $("mic").addEventListener("click", async () => {
-    voice.unlock();
-    if (voice.isSpeaking()) {
-      interrupt();
-      await beginListen(true);
-      return;
-    }
-    if (pushActive) {
-      const text = $("text").value.trim();
-      endListen();
-      if (text) submit(text);
-      return;
-    }
-    await beginListen(true);
-  });
-  $("stage").addEventListener("click", (event) => {
-    if (event.target.closest("#mic")) return;
-    if (voice.isSpeaking()) interrupt();
-  });
-  $("composer").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const text = $("text").value.trim();
-    endListen();
-    submit(text);
-  });
+  for (const button of doc.querySelectorAll("[data-tile]")) {
+    button.addEventListener("click", () => {
+      if (button.dataset.tile === "add") {
+        openSheet("sheet-house");
+        return;
+      }
+      toggleTile(button.dataset.tile);
+    });
+  }
 
-  let deferredInstall = null;
+  let installEvent = null;
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
-    deferredInstall = event;
-    $("install").hidden = false;
+    installEvent = event;
+    doc.querySelector("#install").hidden = false;
   });
-  $("install-go").addEventListener("click", async () => {
-    $("install").hidden = true;
-    if (!deferredInstall) return;
-    deferredInstall.prompt();
-    deferredInstall = null;
+  doc.querySelector("#install-go").addEventListener("click", async () => {
+    if (!installEvent) return;
+    installEvent.prompt();
+    await installEvent.userChoice.catch(() => {});
+    doc.querySelector("#install").hidden = true;
+    installEvent = null;
   });
-  $("install-no").addEventListener("click", () => {
-    $("install").hidden = true;
+  doc.querySelector("#install-hide").addEventListener("click", () => {
+    doc.querySelector("#install").hidden = true;
   });
-  window.speechSynthesis?.addEventListener?.("voiceschanged", fillVoices);
-  $("build").textContent = `ERO 1.0.0 · ${__ERO_BUILD__}`;
+  doc.addEventListener("pointerdown", () => voice.unlock(), { once: true });
 
-  if (!voice.supported()) {
-    $("support").hidden = false;
-    $("support").textContent = "Bu tarayıcı sesi metne çeviremiyor. Chrome veya Android'de mikrofon çalışır; yazarak da konuşabiliriz.";
-  }
-
+  doc.querySelector("#set-gemini").value = settings.geminiKey || "";
+  doc.querySelector("#set-wake").checked = Boolean(settings.wakeWord);
+  doc.querySelector("#set-home").checked = Boolean(settings.homeEnabled);
+  doc.querySelector("#set-ha").value = settings.haUrl || "";
+  doc.querySelector("#set-token").value = settings.haToken || "";
+  doc.querySelector("#build-line").textContent = `Sürüm ${__ERO_BUILD__}`;
+  showGate();
+  showRiddle();
+  paintDevices();
+  paintState("idle");
+  tickClock();
+  setInterval(tickClock, 1000);
+  loadWeather();
   store.messages().then((rows) => {
-    messages = rows.filter((row) => row.role === "user" || row.role === "assistant" || row.role === "error");
-    render();
+    messages = rows.filter((row) => row.role === "user" || row.role === "assistant");
+    renderTranscript();
   });
-  fillSettings();
-  renderDevices();
-  syncFace();
-  if (settings.handsFree) beginListen(false);
+  renderMemories();
 
-  return {
-    toast,
-    isSpeaking: () => voice.isSpeaking(),
-    submit,
-  };
-}
-
-function explainFailure(error) {
-  const status = Number(error?.status || 0);
-  if (status === 429 || status === 402) return "Ücretsiz hat şu an dolu. Biraz sonra yeniden dene.";
-  if (error?.name === "TypeError" || /failed to fetch|network|cors/i.test(String(error?.message || ""))) {
-    return "Modele bağlanılamadı. Bağlantıyı kontrol edip yeniden dene.";
-  }
-  return "Şu an modele ulaşamadım. Biraz sonra yeniden dene.";
-}
-
-function mergeTranscript(current, next) {
-  const a = String(current || "").trim();
-  const b = String(next || "").trim();
-  if (!a) return b;
-  if (!b) return a;
-  if (b.startsWith(a) || a.startsWith(b)) return b.length >= a.length ? b : a;
-  return `${a} ${b}`.trim();
+  return { toast, avatar, session };
 }

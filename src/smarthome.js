@@ -8,6 +8,8 @@ export function createDemoDevices() {
     { id: "climate.klima", name: "Klima", room: "salon", domain: "climate", state: "off", temperature: 24 },
     { id: "cover.perde", name: "Perde", room: "salon", domain: "cover", state: "closed", position: 0 },
     { id: "media_player.tv", name: "Televizyon", room: "salon", domain: "media_player", state: "off" },
+    { id: "media_player.music", name: "Müzik", room: "salon", domain: "music", state: "off" },
+    { id: "switch.security", name: "Güvenlik", room: "hol", domain: "security", state: "off" },
   ];
 }
 
@@ -31,6 +33,8 @@ function confirmText({ domain, action, room, temperature, position }) {
     return action === "off" || position === 0 ? "Perdeyi kapatıyorum." : "Perdeyi açıyorum.";
   }
   if (domain === "media_player") return action === "off" ? "Televizyonu kapatıyorum." : "Televizyonu açıyorum.";
+  if (domain === "music") return action === "off" ? "Müziği kapatıyorum." : "Müziği açıyorum.";
+  if (domain === "security") return action === "off" ? "Güvenliği kapatıyorum." : "Güvenliği açıyorum.";
   return "Tamam.";
 }
 
@@ -39,6 +43,8 @@ function domainOf(text) {
   if (/(klima|klimayı|ısıtıcı|kombi|kombıyı)/.test(text)) return "climate";
   if (/(perde|perdeyi|perdeler|perdeleri|panjur)/.test(text)) return "cover";
   if (/(televizyon|televizyonu|\btv\b)/.test(text)) return "media_player";
+  if (/(müzik|müziği)/.test(text)) return "music";
+  if (/(güvenlik|güvenliği|alarm)/.test(text)) return "security";
   return null;
 }
 
@@ -312,6 +318,20 @@ export function serviceFor(intent) {
     return {
       domain: "cover",
       service: intent.action === "off" || intent.position === 0 ? "close_cover" : "open_cover",
+      data: area,
+    };
+  }
+  if (intent.domain === "music") {
+    return {
+      domain: "media_player",
+      service: intent.action === "off" ? "media_stop" : "media_play",
+      data: area,
+    };
+  }
+  if (intent.domain === "security") {
+    return {
+      domain: "switch",
+      service: intent.action === "off" ? "turn_off" : "turn_on",
       data: area,
     };
   }

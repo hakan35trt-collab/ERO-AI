@@ -28,6 +28,10 @@ test("ışık, klima, perde ve televizyon komutlarını anlar", () => {
   const tv = parseHomeIntent("televizyonu aç");
   assert.equal(tv.domain, "media_player");
   assert.equal(tv.action, "on");
+
+  assert.equal(parseHomeIntent("müziği aç").domain, "music");
+  assert.equal(parseHomeIntent("güvenliği kapat").action, "off");
+  assert.equal(parseHomeIntent("bana bir şarkı söyle").matched, false);
 });
 
 test("şiiri komut sanmaz, karışık cümlede kalanı bırakır", () => {

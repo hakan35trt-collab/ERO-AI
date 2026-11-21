@@ -1,0 +1,350 @@
+{
+  "width": 864,
+  "height": 1152,
+  "base": "base.jpg",
+  "mouth": {
+    "a": {
+      "file": "mouth-a.png",
+      "x": 307,
+      "y": 444,
+      "w": 283,
+      "h": 341
+    },
+    "e": {
+      "file": "mouth-e.png",
+      "x": 307,
+      "y": 444,
+      "w": 283,
+      "h": 341
+    },
+    "i": {
+      "file": "mouth-i.png",
+      "x": 307,
+      "y": 444,
+      "w": 283,
+      "h": 341
+    },
+    "o": {
+      "file": "mouth-o.png",
+      "x": 307,
+      "y": 444,
+      "w": 283,
+      "h": 341
+    },
+    "u": {
+      "file": "mouth-u.png",
+      "x": 307,
+      "y": 444,
+      "w": 283,
+      "h": 341
+    }
+  },
+  "alias": {
+    "fv": "u",
+    "ltd": "e",
+    "s": "i"
+  },
+  "closed": [
+    "rest",
+    "mbp"
+  ],
+  "eyes": {
+    "blink": {
+      "file": "eyes-blink.png",
+      "x": 268,
+      "y": 284,
+      "w": 363,
+      "h": 141,
+      "align": {
+        "dx": 0,
+        "dy": -8,
+        "score": 8.24
+      }
+    },
+    "right": {
+      "file": "eyes-right.png",
+      "x": 283,
+      "y": 320,
+      "w": 333,
+      "h": 87
+    },
+    "up": {
+      "file": "eyes-up.png",
+      "x": 283,
+      "y": 320,
+      "w": 333,
+      "h": 87
+    },
+    "down": {
+      "file": "eyes-down.png",
+      "x": 283,
+      "y": 320,
+      "w": 333,
+      "h": 87
+    },
+    "left": {
+      "file": "eyes-left.png",
+      "x": 283,
+      "y": 320,
+      "w": 333,
+      "h": 87
+    }
+  },
+  "expressions": {
+    "happy": {
+      "file": "expr-happy.jpg",
+      "drawX": 0,
+      "drawY": 0,
+      "score": 23.17
+    },
+    "surprised": {
+      "file": "expr-surprised.jpg",
+      "drawX": 0,
+      "drawY": 4,
+      "score": 24.84
+    },
+    "think": {
+      "file": "expr-think.jpg",
+      "drawX": 0,
+      "drawY": 0,
+      "score": 14.71
+    }
+  },
+  "replace": "Ham kareler public/avatar/raw içindedir, hepsi aynı kadrajda 864x1152 JPG. Değiştirince node scripts/generate-avatar.mjs çalıştır. Ağız ve göz yamaları ile bu manifest yeniden yazılır; uygulama kodu değişmez.",
+  "emotions": {
+    "joy": {
+      "file": "emo-joy.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "sad": {
+      "file": "emo-sad.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "fear": {
+      "file": "emo-fear.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "angry": {
+      "file": "emo-angry.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "confused": {
+      "file": "emo-confused.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "disgust": {
+      "file": "emo-disgust.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "calm": {
+      "file": "emo-calm.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "shy": {
+      "file": "emo-shy.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "happy": {
+      "file": "emo-happy.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "surprised": {
+      "file": "emo-surprised.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "think": {
+      "file": "emo-think.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    }
+  },
+  "brows": {
+    "raise": {
+      "file": "brow-raise.png",
+      "x": 268,
+      "y": 266,
+      "w": 363,
+      "h": 68
+    },
+    "frown": {
+      "file": "brow-frown.png",
+      "x": 268,
+      "y": 266,
+      "w": 363,
+      "h": 68
+    },
+    "one": {
+      "file": "brow-one.png",
+      "x": 268,
+      "y": 266,
+      "w": 363,
+      "h": 68
+    },
+    "wink": {
+      "file": "wink.png",
+      "x": 449,
+      "y": 320,
+      "w": 167,
+      "h": 87,
+      "side": "izleyici-sağ"
+    }
+  },
+  "head": {
+    "left": {
+      "file": "head-left.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "up": {
+      "file": "head-up.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "down": {
+      "file": "head-down.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "tilt": {
+      "file": "head-tilt.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    },
+    "right": {
+      "file": "head-right.png",
+      "x": 155,
+      "y": 78,
+      "w": 589,
+      "h": 622
+    }
+  },
+  "generated": {
+    "eye-left": "eye-right karesindeki göz bölgesi yatay aynalandı. Ceket ve ERO yazısı taban kareden gelir.",
+    "head-right": "head-left yüz bölgesi yatay aynalanıp tabana oturtuldu. ERO yazısı aynalanmaz."
+  },
+  "detect": {
+    "skin": {
+      "x": 260,
+      "y": 194,
+      "w": 378,
+      "h": 486
+    },
+    "mouth": {
+      "cx": 448,
+      "cy": 614,
+      "rx": 142,
+      "ry": 171
+    },
+    "face": {
+      "cx": 449,
+      "cy": 388.4,
+      "rx": 294.84000000000003,
+      "ry": 311.04
+    },
+    "gaze": {
+      "cx": 449,
+      "cy": 362.83639999999997,
+      "rx": 166.9248,
+      "ry": 43.6914
+    },
+    "brow": {
+      "cx": 449,
+      "cy": 299.4134,
+      "rx": 181.44,
+      "ry": 33.8256
+    },
+    "eyes": {
+      "cx": 449,
+      "cy": 354.38,
+      "rx": 181.44,
+      "ry": 70.47
+    },
+    "shifts": {
+      "a": {
+        "dx": 4,
+        "dy": 0,
+        "score": 21.96
+      },
+      "e": {
+        "dx": 0,
+        "dy": 4,
+        "score": 33.27
+      },
+      "i": {
+        "dx": 0,
+        "dy": 4,
+        "score": 25.09
+      },
+      "o": {
+        "dx": 0,
+        "dy": -4,
+        "score": 29.63
+      },
+      "u": {
+        "dx": 0,
+        "dy": 0,
+        "score": 17.1
+      },
+      "blink": {
+        "dx": 0,
+        "dy": 4,
+        "score": 33.58
+      },
+      "happy": {
+        "dx": 0,
+        "dy": 0,
+        "score": 23.17
+      },
+      "surprised": {
+        "dx": 0,
+        "dy": -4,
+        "score": 24.84
+      },
+      "think": {
+        "dx": 0,
+        "dy": 0,
+        "score": 14.71
+      }
+    }
+  }
+}

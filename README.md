@@ -1,6 +1,6 @@
 # ERO
 
-ERO, Türkçe konuşan kişisel bir sesli asistan. Ekranın ortasında yaşayan bir yüz var: bekler, dinler, düşünür, konuşur; sohbetin duygusuna göre mutlu, şaşkın, üzgün ya da meraklı olabilir. Telefona kurulabilen bir PWA’dır, masaüstünde de açılır. Anahtar girmeden çalışır.
+ERO, Türkçe konuşan kişisel bir sesli asistan. Telefonda eller serbest sohbet eder; ortadaki portre konuşurken ağız ve gözleriyle eşlik eder. Ana ekrana kurulabilen bir PWA’dır.
 
 ## Yerelde çalıştırma
 
@@ -12,8 +12,6 @@ npm run dev
 
 Uygulama [http://127.0.0.1:8731](http://127.0.0.1:8731) adresinde açılır.
 
-Üretim derlemesi ve hizmet çalışanıyla önizleme:
-
 ```bash
 npm run build
 npm run preview
@@ -23,73 +21,80 @@ npm run preview
 
 1. Siteyi **Chrome** ile aç.
 2. “ERO’yu ana ekrana ekle” bandına dokun veya Chrome menüsünden **Yükle** / **Ana ekrana ekle**’yi seç.
-3. Ana ekrandaki ERO simgesinden aç. Adres çubuğu kaybolur, tam ekran uygulama gibi durur.
-4. Mikrofon iznini ver. Konuşmazsan alttaki kutudan da yazabilirsin.
+3. Ana ekrandaki ERO simgesinden aç.
+4. İlk açılışta ücretsiz Gemini anahtarını yapıştır. Anahtar yalnızca bu tarayıcının `localStorage` alanına yazılır.
 
-iPhone’da Safari’nin Paylaş menüsünden **Ana Ekrana Ekle** kullanılır. Konuşmayı yazıya çevirme iOS’ta çoğu zaman yoktur; yazarak sohbet edebilirsin.
+iPhone’da Safari’nin Paylaş menüsünden **Ana Ekrana Ekle** kullanılır. Canlı mikrofon orada sınırlıdır; yazarak da konuşabilirsin.
 
 ## Güncelleme
 
-Kurulu uygulama yeni sürümü kendi alır. Hizmet çalışanı sayfa açılınca ve yaklaşık her 30 dakikada bir denetler. Yeni sürüm hazır olunca “Yeni ERO sürümü hazır. Yenileniyor…” bildirimi çıkar ve sayfa kendiliğinden yenilenir. ERO o sırada konuşuyorsa cümle bitsin diye kısa bir süre bekler.
+Kurulu uygulama yeni sürümü kendi alır. Hizmet çalışanı sayfa açılınca, sekme öne gelince ve yaklaşık her dakika denetler. Yeni dosyalar iner inmez bekleyen çalışan hemen devralır ve sayfa yenilenir. ERO o sırada konuşuyorsa cümle bitsin diye kısa bir süre bekler.
 
-## GitHub’a taşıyıp Pages’te yayınlama
+## GitHub Pages
 
 Canlı adres: [https://hakan35trt-collab.github.io/ERO-AI/](https://hakan35trt-collab.github.io/ERO-AI/)
 
-Kaynak `hakan35trt-collab/ERO-AI` deposunun `main` dalındadır. Her push `.github/workflows/pages.yml` ile test eder, derler ve GitHub Pages’e çıkar. Üretim derlemesinin kökü `/ERO-AI/`dir: Vite `base`, bildirim dosyasının `start_url` ve `scope` değerleri, hizmet çalışanının kapsamı ve ikon yolları bu alt yola göredir. Depo adı değişirse `vite.config.js` içindeki `pagesBase` aynı adla güncellenmelidir.
-
-Pages kaynağı **Settings → Pages → Build and deployment → Source: GitHub Actions** olmalıdır. İlk yayında bu seçili değilse oradan seç.
-
-İlk yayın bir iki dakika sürebilir. Sonraki `main` push’ları aynı akışla kendiliğinden güncellenir. Kurulu telefon uygulaması bir sonraki açılışta yeni sürümü indirir.
+Her `main` push’u `.github/workflows/pages.yml` ile test eder, derler ve yayınlar. Üretim kökü `/ERO-AI/`dir. Pages kaynağı **Settings → Pages → Source: GitHub Actions** olmalıdır.
 
 ## Konuşma
 
-- Mikrofon düğmesi dinler. Ara vermen cümleyi gönderir; düğmeye yeniden basmak da gönderir.
-- ERO yanıtı cümle cümle, akış geldikçe seslendirmeye başlar.
-- Yüze veya düğmeye dokunmak sözünü keser. Eller serbest modda konuşman da keser.
-- Ayarlar’dan **Eller serbest** açılırsa “ERO” deyince dinlemeye geçer. Yalnızca “ERO” dersen “Efendim?” der.
-- Şiir, şarkı ve hikâye isteyebilirsin. Şarkı sözlerini perdeyi değiştirerek okur; bu bir melodi motoru değil, konuşma sesiyle okunan bir söyleyiştir.
-- Ayarlar’dan Türkçe ses, hız ve perde seçilir.
+Bir kez **Konuşmayı başlat**’a dokun. ERO dinlemeye devam eder; her turda mikrofona yeniden basılmaz. Sustuğunda (yaklaşık 700 ms) sıra ona geçer. **Durdur** veya güç düğmesi dinlemeyi keser. Konuşurken mikrofon durur; sesin belirgin biçimde yüksekse sözünü keser. Canlı Gemini hattında sunucunun kendi ses etkinliği algısı ve kesme desteği kullanılır, mikrofon yankı engellemeyle açık kalır.
 
-Ses tanıma **Chrome ve Android** üzerinde çalışır. Firefox masaüstünde ve iOS Safari’de mikrofon tanıması çoğu zaman yoktur. Konuşma sesi de cihazda yüklü Türkçe sese bağlıdır.
+Ayarlardaki **Yalnızca “ERO” deyince uyan** kapalı başlar. Açılırsa yedek hatta cümle “ERO” ile başlamalıdır.
 
-## Model
+Klavyeden de yazılır. Sohbet balonları sohbet sekmesindedir.
 
-Anahtar gerekmez. İstek sırası `src/llm.js` içindeki sağlayıcı listesindedir; değiştirmek için tek bakılacak yer orası.
+## Ses hattı
 
-1. Ayarlara yapıştırılmış OpenAI uyumlu adres, model ve isteğe bağlı anahtar.
-2. LLM7 (`mistral-Nemo-Instruct-2407`, olmazsa `codestral-latest`) — anahtarsız.
-3. Pollinations (`openai-fast`) — anahtarsız, akış ya da düz metin.
+Anahtar [Google AI Studio](https://aistudio.google.com/apikey) üzerinden alınır. Depoya, iş akışına veya bir sunucuya hiç yazılmaz. Ayarlar ekranındaki alan da aynı yerel depoya gider.
 
-Biri kota, 402 veya boş yanıt verirse sonrakine geçer. Ücretsiz hatlar paylaşılır: Pollinations yaklaşık 45 saniyede bir istek kabul eder, LLM7’nin anonim kotası vardır. Daha hızlı ve dengeli yanıt için Ayarlar’a Groq, OpenRouter veya Gemini’nin OpenAI uyumlu adresini ve kendi anahtarını yazabilirsin. Anahtar yalnızca bu tarayıcıda durur.
+1. **Canlı konuşma:** tarayıcıdan Gemini Live WebSocket. Modeller sırayla `gemini-omni-flash-preview`, sonra `gemini-omni-1.2-flash`. Ses **Charon** (sıcak erkek). Giriş 16 kHz PCM, çıkış 24 kHz PCM. Sessizlik eşiği 700 ms.
+2. Canlı hat açılmazsa: mikrofon + yerel sessizlik algısı, metin için `gemini-3.5-flash-lite` (503/429 olursa yeniden dener, sonra `gemini-3.8-flash`), ses için `gemini-2.5-flash-preview-tts` ve yine Charon. Cümle cümle okunur.
+3. Anahtar yoksa veya Gemini de susarsa: LLM7, sonra Pollinations. Bu yolda ses, cihazın `speechSynthesis` motorudur. Bu son çaredir.
 
-## Bellek ve araştırma
+## Portre
 
-“Kedimin adı Misket, bunu hatırla” gibi cümleler bu cihaza yazılır. Model bir anı önerirse ERO sormadan kaydetmez; bildirimden onaylarsın. Ayarlar’dan anılar görülebilir, eklenebilir, silinebilir. Son sohbet de cihazda kalır.
+Ortadaki yüz, `public/avatar/` altındaki fotoğraf kareleridir. Hepsi aynı kadrajda **864×1152** JPG.
 
-Güncel ya da ansiklopedik sorularda ERO, anahtarsız olarak Türkçe Vikipedi, DuckDuckGo anlık yanıtı ve hava için Open-Meteo’ya bakar. Notları modele verir ve balonda kaynağı gösterir. Uydurmaması söylenir; ücretsiz model yine de yanılabilir.
+Ham kareler `public/avatar/raw/`:
 
-## Akıllı ev
+| Dosya | Ne |
+| --- | --- |
+| `base.jpg` | Kapalı ağız, düz bakış. Dinlenme ve M/B/P bunu kullanır. |
+| `viseme-a.jpg` | Geniş “a” |
+| `viseme-e.jpg` | Hafif açık “e”. L/T/D de buna bağlanır. |
+| `viseme-i.jpg` | Dişler, dar “i”. S de buna bağlanır. |
+| `viseme-o.jpg` | Yuvarlak “o” |
+| `viseme-u.jpg` | Büzük “u”. F/V de buna bağlanır. |
+| `expr-blink.jpg` | Gözler kapalı |
+| `expr-happy.jpg` | Gülümseme |
+| `expr-surprised.jpg` | Şaşırma |
+| `expr-thinking.jpg` | Yukarı-yana bakış |
 
-Modül hazırdır ve **kapalı** başlar. “Işıkları aç”, “mutfak ışığını kapat”, “klimayı 22 dereceye ayarla”, “perdeleri yüzde 40 aç”, “televizyonu kapat” gibi cümleler ayrıştırılır.
+`node scripts/generate-avatar.mjs` ceket logosuna göre küçük kaymayı ölçer. Ağız, göz, kaş, duygu ve baş kareleri tüylü elips olarak tabanın üzerine oturur; ERO yazısı tabanda kalır ve aynalanmaz. `eye-left` gelen dosyadan değil, `eye-right` göz bölgesinin yatay aynasından üretilir. `head-right` de `head-left` yüzünün aynasıdır. Duygu etiketleri `[mutlu]` `[üzgün]` `[şaşkın]` `[korkmuş]` `[kızgın]` `[düşünceli]` `[sakin]` `[utangaç]` yanıtın başında durur, ekranda ve seste silinir. Boşta bakış, kırpma, kaş ve küçük baş hareketi 180 ms’de erir. Dinlerken baş iner ve kaş kalkar. Düşünürken göz yukarı, şaşkın yüz ve çatık kaş gelir. Dosya adları `public/avatar/manifest.json` içindedir. Ham kareyi değiştirip betiği yeniden çalıştırmak yeter.
 
-- **Simülasyon:** Ayarlar’dan açılınca komutlar ekrandaki cihazları değiştirir. Ev panosundan da dokunulabilir.
-- **Home Assistant:** Bağdaştırıcıyı seç, adres (`http://192.168.1.20:8123`) ve uzun ömürlü token’ı yaz, bağlantıyı etkinleştir. REST ile servis çağrılır; WebSocket açılırsa durum olayları da dinlenir. Tarayıcı başka bir adrese istek attığı için Home Assistant yapılandırmasına bu sitenin adresi eklenmelidir:
+Portre nefes alır gibi hafifçe büyür ve birkaç piksel yana sallanır. Arkada neon halka ve ufuk çizgisi vardır.
 
-  ```yaml
-  http:
-    cors_allowed_origins:
-      - https://<kullanıcı>.github.io
-  ```
+## Bellek, araştırma, ev
 
-  Yerel denemede `http://127.0.0.1:8731` de listeye girer. “Bağlantıyı dene” düğmesi `/api/` ucunu kontrol eder.
-- **Tuya:** Aynı arayüzü kullanan bir taslak var. Yöntemler bilinçli olarak “henüz bağlı değil” der; ileride doldurulacak.
+“Bunu hatırla” bu cihaza yazılır. Anılar katmanlar sekmesindedir. Güncel sorularda Türkçe Vikipedi, DuckDuckGo ve Open-Meteo notları modele gider. Hava kartı konumdan, olmazsa Kocaeli’nden dolar.
+
+Alt şerit demo cihazlardır: Işıklar, Klima, TV, Müzik, Güvenlik. “Işıkları aç”, “klimayı 22 dereceye ayarla”, “müziği aç” gibi cümleler de aynı listeyi değiştirir. Gerçek ev için Ayarlar’dan Home Assistant adresi ve jetonu yazılır. Tarayıcı başka bir adrese gittiği için Home Assistant’ta şu kök gerekir:
+
+```yaml
+http:
+  cors_allowed_origins:
+    - https://hakan35trt-collab.github.io
+```
+
+Yerelde `http://127.0.0.1:8731` de eklenir. Tuya bağdaştırıcısı aynı arayüzde durur ve henüz bağlı değildir.
 
 ## Sınırlamalar
 
-- Konuşmayı yazıya çevirmek Chrome / Android’e bağlıdır ve Google’ın tanıma servisine ağ ister.
-- Türkçe ses yoksa cihaz varsayılan sesle okur.
-- Ücretsiz modeller yavaşlayabilir, kota dolduğunda kısa süre susabilir veya üslubu kaçırabilir.
-- Hava dışında anlık haber, döviz ve maç sonucu bağlanmadı; ERO bunları uydurmamalı, bilmediğini söylemeli.
-- Akıllı ev gerçek eve bağlı değildir. Home Assistant için yukarıdaki CORS ayarı şarttır. Tuya kapalıdır.
-- Anılar ve sohbet bu tarayıcının deposundadır. Başka telefona geçmez.
+- Canlı modeller ve Charon sesi, yapıştırılan anahtarın o an erişebildiği modellere bağlıdır. Yüksek talep 503 olursa sıradaki modele geçilir. Anahtar olmadan bu hat denemez.
+- Canlı Türkçe kalitesi modele göre değişir. Olmazsa cümle cümle Gemini sesi, o da olmazsa cihazın kendi sesi devreye girer.
+- Anahtarsız LLM7 ve Pollinations paylaşımlı kotadadır; ilk yanıttan sonra bir süre “hat dolu” diyebilir.
+- Konuşmayı yazıya dökmek, Gemini canlı hattı dışında Chrome ve Android’e bağlıdır.
+- Düşünme karesinde baş hafif kaymış olabilir. Tam kare erimesi bunu gizlemez; ağız ve göz yamaları taban portreye oturur.
+- Demo cihazlar sayfa yenilenince sıfırlanır. Anılar ve anahtar yalnız bu tarayıcıdadır.
+- Home Assistant için CORS şarttır. Tuya kapalıdır.

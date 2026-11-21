@@ -78,13 +78,55 @@ export function explicitMemories(text) {
   return { facts, remainder: remainder.replace(/^[,.\s]+|[,.\s]+$/g, "") };
 }
 
+export const EMOTION_TAGS = [
+  ["mutlu", "joy"],
+  ["üzgün", "sad"],
+  ["şaşkın", "surprised"],
+  ["korkmuş", "fear"],
+  ["kızgın", "angry"],
+  ["düşünceli", "confused"],
+  ["sakin", "calm"],
+  ["utangaç", "shy"],
+  ["iğrenmiş", "disgust"],
+];
+
+export function stripEmotionTags(text) {
+  return String(text || "").replace(/\[(?:mutlu|üzgün|şaşkın|korkmuş|kızgın|düşünceli|sakin|utangaç|iğrenmiş)\]/gi, "");
+}
+
 export function guessEmotion(text) {
-  const t = String(text || "").toLocaleLowerCase("tr-TR");
+  const t = stripEmotionTags(text).toLocaleLowerCase("tr-TR");
+  if (/(korktum|korkunç|korkuyor|ürktüm|korku)/.test(t)) return "fear";
+  if (/(kızdım|sinir|öfke|kızgın|öfkeli)/.test(t)) return "angry";
+  if (/(iğrenç|tiksin|midem bulandı)/.test(t)) return "disgust";
+  if (/(utandım|utangaç|mahcup)/.test(t)) return "shy";
+  if (/(sakinim|sakin ol|rahatla)/.test(t)) return "calm";
   if (/(üzgün|üzüldüm|geçmiş olsun|zor gün|maalesef|yazık)/.test(t)) return "sad";
   if (/(vay|inanılmaz|şaşırdım|gerçekten mi|olağanüstü|ciddi misin)/.test(t)) return "surprised";
   if (/(harika|sevindim|tebrik|ne güzel|güzel olmuş|haha|şarkı|şiir|mutlu)/.test(t)) return "happy";
+  if (/(kararsız|anlamadım|emin değil)/.test(t)) return "confused";
   if (/\?/.test(t)) return "curious";
   return "neutral";
+}
+
+export function emotionFromText(text) {
+  const raw = String(text || "").toLocaleLowerCase("tr-TR");
+  for (const [tag, name] of EMOTION_TAGS) {
+    if (raw.includes(`[${tag}]`)) return name;
+  }
+  const guess = guessEmotion(text);
+  const map = {
+    happy: "joy",
+    sad: "sad",
+    surprised: "surprised",
+    fear: "fear",
+    angry: "angry",
+    shy: "shy",
+    disgust: "disgust",
+    calm: "calm",
+    confused: "confused",
+  };
+  return map[guess] || "";
 }
 
 export function parseMeta(raw) {
@@ -133,6 +175,9 @@ export function sanitizeFinal(text) {
     memories.push(...meta.memories);
     return "";
   });
+  const tagged = emotionFromText(spoken);
+  spoken = stripEmotionTags(spoken);
+  if (!emotion && tagged) emotion = tagged;
   spoken = spoken.replace(/\[(?:sarki|şarkı|siir|şiir|hikaye|hikâye)\]/gi, "");
   spoken = unwrapQuotes(spoken).trim();
   return { spoken, emotion, memories };
@@ -152,7 +197,8 @@ export function unwrapQuotes(text) {
 }
 
 export function forSpeech(text) {
-  return String(text || "")
+  return stripEmotionTags(text)
+    .replace(/<ero>[\s\S]*?<\/ero>/gi, "")
     .replace(/\[(?:sarki|şarkı|siir|şiir|hikaye|hikâye)\]/gi, "")
     .replace(/[*_`#>]/g, "")
     .replace(/[ \t]+\n/g, "\n")

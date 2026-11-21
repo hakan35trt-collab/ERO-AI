@@ -23,130 +23,151 @@
       <noscript>ERO için JavaScript gerekir.</noscript>
     </div>
 
-    <div id="app">
+    <div id="gate" class="gate" hidden>
+      <div class="gate-card">
+        <p class="gate-kicker">İlk açılış</p>
+        <h1>ERO ile doğal konuşmak için ücretsiz bir Gemini anahtarı yeter.</h1>
+        <p>Anahtar yalnızca bu telefonda saklanır. Sunucuya veya depoya yazılmaz.</p>
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Anahtar oluştur</a>
+        <label for="gate-key">Gemini anahtarı</label>
+        <input id="gate-key" type="password" autocomplete="off" placeholder="AI Studio anahtarını yapıştır" />
+        <button id="gate-save" type="button">Kaydet ve konuş</button>
+        <button id="gate-skip" type="button" class="ghost">Anahtarsız dene</button>
+      </div>
+    </div>
+
+    <div id="app" class="phone">
       <header class="top">
-        <div class="brand">
-          <img src="./ero-mark.svg" alt="" width="36" height="36" />
-          <div>
-            <strong>ERO</strong>
-            <span>kişisel asistan</span>
-          </div>
+        <button id="btn-menu" class="icon-btn" type="button" aria-label="Menü">☰</button>
+        <div class="logo-block">
+          <h1>ERO</h1>
+          <p>Kişisel Yapay Zekâ Asistanın</p>
+          <span class="mini-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
         </div>
-        <div class="top-actions">
-          <button id="btn-home" type="button" aria-label="Akıllı ev">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>
-          </button>
-          <button id="btn-settings" type="button" aria-label="Ayarlar">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5z"/><path d="M19.4 13a7.7 7.7 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a8 8 0 0 0-1.7-1L15 3h-4l-.5 2.9a8 8 0 0 0-1.7 1L6.5 6.4l-2 3.4L6.5 11a7.7 7.7 0 0 0 0 2l-2 1.2 2 3.4 2.3-.6a8 8 0 0 0 1.7 1L11 21h4l.5-2.9a8 8 0 0 0 1.7-1l2.3.6 2-3.4z"/></svg>
-          </button>
-        </div>
+        <button id="btn-bell" class="icon-btn" type="button" aria-label="Bildirimler">🔔</button>
+        <button id="btn-power" class="icon-btn" type="button" aria-label="Kapat">⏻</button>
       </header>
 
       <div id="install" class="install" hidden>
-        <p>ERO'yu ana ekrana ekle, uygulama gibi açılsın.</p>
-        <button id="install-go" type="button">Yükle</button>
-        <button id="install-no" type="button">Sonra</button>
+        <p>ERO'yu ana ekrana ekleyebilirsin.</p>
+        <button id="install-go" type="button">Ekle</button>
+        <button id="install-hide" type="button">Sonra</button>
       </div>
 
-      <main>
-        <section class="stage" id="stage">
-          <canvas id="face" aria-label="ERO yüzü"></canvas>
-          <p id="status" aria-live="polite">Bekliyor</p>
-          <p id="substatus"></p>
-          <button id="mic" type="button">
-            <span class="mic-rings" aria-hidden="true"></span>
-            <svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8 21h8"/></svg>
-            <svg class="icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
-            <span id="mic-label">Konuş</span>
-          </button>
-        </section>
+      <section class="cards">
+        <article class="card" id="weather">
+          <p id="weather-city">Kocaeli</p>
+          <strong id="weather-temp">--°</strong>
+          <span id="weather-sky">hava yükleniyor</span>
+        </article>
+        <article class="card">
+          <p id="clock-date">--</p>
+          <strong id="clock-time">--:--</strong>
+          <span>yerel saat</span>
+        </article>
+      </section>
 
-        <section class="chat">
-          <div id="support" class="support" hidden></div>
-          <div id="transcript" aria-live="polite"></div>
-          <form id="composer">
-            <label class="sr" for="text">İleti</label>
-            <input id="text" name="text" autocomplete="off" placeholder="Yaz veya mikrofona dokun" maxlength="2000" />
-            <button id="send" type="submit">Gönder</button>
-          </form>
-        </section>
-      </main>
+      <div class="stage">
+        <nav class="rail" aria-label="Bölümler">
+          <button type="button" data-panel="home" class="on" aria-label="Ana sayfa">⌂</button>
+          <button type="button" data-panel="chat" aria-label="Sohbet">💬</button>
+          <button type="button" data-panel="layers" aria-label="Anılar">▤</button>
+          <button type="button" data-panel="games" aria-label="Oyun">🎮</button>
+          <button type="button" data-panel="cube" aria-label="Hakkında">◻</button>
+          <button type="button" data-panel="house" aria-label="Akıllı ev">⌂︎</button>
+          <button type="button" data-panel="settings" aria-label="Ayarlar">⚙</button>
+        </nav>
+
+        <main>
+          <section class="scene" aria-label="ERO">
+            <div class="earth"></div>
+            <div class="ring"></div>
+            <canvas id="avatar" width="720" height="960"></canvas>
+            <div class="platform"><span class="floor-wave" aria-hidden="true"></span></div>
+          </section>
+
+          <div id="pill" class="pill" data-state="idle">
+            <i></i>
+            <div>
+              <strong id="pill-title">ERO Hazır</strong>
+              <span id="pill-sub">Seninle konuşmaya hazırım...</span>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button id="btn-key" type="button" aria-label="Yaz">⌨</button>
+            <button id="mic" type="button">Konuşmayı başlat</button>
+            <button id="btn-wave" type="button" aria-label="Ses dalgası" aria-pressed="true">≋</button>
+          </div>
+
+          <div class="tiles" id="tiles">
+            <button type="button" data-tile="lights">Işıklar</button>
+            <button type="button" data-tile="climate">Klima</button>
+            <button type="button" data-tile="tv">TV</button>
+            <button type="button" data-tile="music">Müzik</button>
+            <button type="button" data-tile="security">Güvenlik</button>
+            <button type="button" data-tile="add">Ekle</button>
+          </div>
+        </main>
+      </div>
     </div>
 
-    <div id="toasts" aria-live="polite"></div>
+    <section id="sheet-chat" class="sheet" hidden>
+      <header><h2>Sohbet</h2><button type="button" data-close="sheet-chat">Kapat</button></header>
+      <div id="transcript"></div>
+      <form id="composer">
+        <input id="prompt" name="prompt" autocomplete="off" placeholder="ERO'ya yaz" />
+        <button type="submit">Gönder</button>
+      </form>
+    </section>
 
-    <aside id="settings" class="sheet" hidden>
-      <div class="sheet-card">
-        <header class="sheet-head">
-          <h2>Ayarlar</h2>
-          <button type="button" data-close="settings" aria-label="Kapat">×</button>
-        </header>
+    <section id="sheet-layers" class="sheet" hidden>
+      <header><h2>Anılar</h2><button type="button" data-close="sheet-layers">Kapat</button></header>
+      <ul id="memory-list"></ul>
+      <form id="memory-form">
+        <input id="memory-input" placeholder="Bunu hatırla" />
+        <button type="submit">Kaydet</button>
+      </form>
+    </section>
 
-        <section>
-          <h3>Ses</h3>
-          <label>Ses
-            <select id="opt-voice"></select>
-          </label>
-          <p id="voice-note" class="hint"></p>
-          <label>Hız <input id="opt-rate" type="range" min="0.8" max="1.25" step="0.01" /></label>
-          <label>Perde <input id="opt-pitch" type="range" min="0.8" max="1.3" step="0.01" /></label>
-          <label class="check"><input id="opt-hands" type="checkbox" /> Eller serbest. “ERO” deyince dinler.</label>
-        </section>
+    <section id="sheet-games" class="sheet" hidden>
+      <header><h2>Oyun</h2><button type="button" data-close="sheet-games">Kapat</button></header>
+      <p id="riddle"></p>
+      <button id="riddle-next" type="button">Başka bilmece</button>
+    </section>
 
-        <section>
-          <h3>Anılar</h3>
-          <form id="memory-form" class="row">
-            <input id="memory-text" placeholder="Yeni bir anı" maxlength="180" />
-            <button type="submit">Ekle</button>
-          </form>
-          <div id="memory-list"></div>
-          <button id="memory-clear" type="button" class="ghost">Anıların hepsini sil</button>
-        </section>
+    <section id="sheet-cube" class="sheet" hidden>
+      <header><h2>ERO</h2><button type="button" data-close="sheet-cube">Kapat</button></header>
+      <p>Kısa konuşan, anı tutan, şiir ve şarkı söyleyebilen Türkçe bir arkadaş.</p>
+      <p id="build-line"></p>
+    </section>
 
-        <section>
-          <h3>Daha hızlı model</h3>
-          <p class="hint">Boş bırakırsan ERO anahtarsız çalışır. İstersen OpenAI uyumlu bir adres, model ve anahtar yapıştır. Anahtar yalnız bu cihazda durur.</p>
-          <label>Adres <input id="opt-base" type="url" placeholder="https://api.groq.com/openai/v1" autocomplete="off" /></label>
-          <label>Model <input id="opt-model" placeholder="llama-3.3-70b-versatile" autocomplete="off" /></label>
-          <label>Anahtar <input id="opt-key" type="password" autocomplete="off" /></label>
-        </section>
+    <section id="sheet-house" class="sheet" hidden>
+      <header><h2>Akıllı ev</h2><button type="button" data-close="sheet-house">Kapat</button></header>
+      <ul id="device-list"></ul>
+      <p class="hint">Bu kareler demo. Gerçek ev için ayarlardan Home Assistant adresini yaz.</p>
+    </section>
 
-        <section>
-          <h3>Akıllı ev</h3>
-          <p class="hint">Modül hazır, varsayılan olarak kapalı. Simülasyon ekranda cihaz açar. Home Assistant için adres ve uzun ömürlü token gerekir. Tuya bağdaştırıcısı henüz bağlı değil.</p>
-          <label class="check"><input id="opt-home" type="checkbox" /> Bağlantıyı etkinleştir</label>
-          <label class="check"><input id="opt-demo" type="checkbox" /> Simülasyon</label>
-          <label>Bağdaştırıcı
-            <select id="opt-adapter">
-              <option value="homeassistant">Home Assistant</option>
-              <option value="tuya">Tuya (hazır, kapalı)</option>
-            </select>
-          </label>
-          <label>Adres <input id="opt-ha-url" type="url" placeholder="http://192.168.1.20:8123" autocomplete="off" /></label>
-          <label>Token <input id="opt-ha-token" type="password" autocomplete="off" /></label>
-          <button id="opt-ha-test" type="button" class="ghost">Bağlantıyı dene</button>
-          <p id="ha-result" class="hint"></p>
-        </section>
+    <section id="sheet-settings" class="sheet" hidden>
+      <header><h2>Ayarlar</h2><button type="button" data-close="sheet-settings">Kapat</button></header>
+      <form id="settings-form">
+        <label for="set-gemini">Gemini anahtarı</label>
+        <input id="set-gemini" type="password" autocomplete="off" placeholder="Yalnızca bu cihazda kalır" />
+        <label class="check"><input id="set-wake" type="checkbox" /> Yalnızca “ERO” deyince uyan</label>
+        <label class="check"><input id="set-home" type="checkbox" /> Home Assistant kullan</label>
+        <label for="set-ha">Adres</label>
+        <input id="set-ha" placeholder="http://192.168.1.20:8123" />
+        <label for="set-token">Jeton</label>
+        <input id="set-token" type="password" autocomplete="off" />
+        <div class="row">
+          <button type="submit">Kaydet</button>
+          <button id="ha-test" type="button">Bağlantıyı dene</button>
+          <button id="clear-chat" type="button">Sohbeti sil</button>
+        </div>
+      </form>
+    </section>
 
-        <section>
-          <button id="clear-chat" type="button" class="ghost">Sohbeti temizle</button>
-          <p id="build" class="hint"></p>
-          <p class="hint">iPhone'da Paylaş menüsünden Ana Ekrana Ekle. Android'de Chrome, yükle bandını ya da menüdeki yükle seçeneğini kullanır.</p>
-        </section>
-      </div>
-    </aside>
-
-    <aside id="home-panel" class="sheet" hidden>
-      <div class="sheet-card">
-        <header class="sheet-head">
-          <h2>Akıllı ev</h2>
-          <button type="button" data-close="home-panel" aria-label="Kapat">×</button>
-        </header>
-        <p id="home-note" class="hint"></p>
-        <div id="devices"></div>
-      </div>
-    </aside>
-
+    <div id="toasts"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

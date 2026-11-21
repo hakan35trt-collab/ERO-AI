@@ -90,6 +90,21 @@ async function ddgNote(query) {
   return `Kaynak: DuckDuckGo\n${heading}Özet: ${String(abstract).slice(0, 500)}`;
 }
 
+export const KOCAELI = { latitude: 40.8533, longitude: 29.8815, name: "Kocaeli" };
+
+export async function localForecast({ latitude, longitude, name }) {
+  const forecast = await getJson(
+    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`,
+  );
+  const current = forecast?.current;
+  if (!current) return null;
+  return {
+    name,
+    temp: Math.round(current.temperature_2m),
+    sky: WEATHER[current.weather_code] || "değişken",
+  };
+}
+
 export async function research(question) {
   const weather = await weatherNote(question);
   const query = cleanQuery(question);
