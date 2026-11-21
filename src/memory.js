@@ -54,6 +54,26 @@ function txDone(tx) {
   });
 }
 
+export function bundledGeminiKey() {
+  const value = import.meta.env?.VITE_GEMINI_API_KEY;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function effectiveGeminiKey(settings, bundled = bundledGeminiKey()) {
+  const local = String(settings?.geminiKey || "").trim();
+  return local || String(bundled || "").trim();
+}
+
+export function parseSetupKey(hash) {
+  const match = String(hash || "").match(/^#key=([^&]*)/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]).trim();
+  } catch {
+    return String(match[1] || "").trim();
+  }
+}
+
 export function loadSettings() {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };

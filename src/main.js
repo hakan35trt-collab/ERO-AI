@@ -8,6 +8,14 @@ import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-ext-400.css";
 import "./styles.css";
 import { mount } from "./app.js";
+import { loadSettings, parseSetupKey, saveSettings } from "./memory.js";
+
+const setupKey = parseSetupKey(location.hash);
+if (setupKey) {
+  const current = loadSettings();
+  saveSettings({ ...current, geminiKey: setupKey, geminiSkipped: false });
+  history.replaceState(null, "", `${location.pathname}${location.search}`);
+}
 
 const speaking = { current: false };
 const app = mount(document, {
@@ -23,7 +31,7 @@ if (splash) {
     splash.classList.add("leave");
     setTimeout(() => splash.remove(), 520);
   };
-  if (params.has("ifade")) splash.remove();
+  if (params.has("ifade") || params.get("splash") === "0") splash.remove();
   else if (params.get("splash") === "1") splash.addEventListener("click", close);
   else {
     splash.addEventListener("click", close);

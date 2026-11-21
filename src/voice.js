@@ -122,7 +122,7 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
           } catch {
             /* yoksay */
           }
-        }, 700);
+        }, 420);
       };
       recognition.onerror = (event) => {
         const code = event.error || "error";

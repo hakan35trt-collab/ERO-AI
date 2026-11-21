@@ -145,9 +145,24 @@ export function createPcmPlayer({ sampleRate = 24000, onLevel } = {}) {
       weighted += i * freq[i];
       energy += freq[i];
     }
+    const hz = (context.sampleRate / 2) / freq.length;
+    const band = (from, to) => {
+      let total = 0;
+      let count = 0;
+      for (let i = 0; i < freq.length; i++) {
+        const frequency = i * hz;
+        if (frequency < from || frequency >= to) continue;
+        total += freq[i];
+        count += 1;
+      }
+      return count ? total / count / 255 : 0;
+    };
     onLevel?.({
       rms: Math.sqrt(sum / wave.length),
       centroid: energy ? weighted / energy / freq.length : 0,
+      low: band(200, 600),
+      mid: band(600, 1800),
+      high: band(1800, 4000),
       speaking: playing.size > 0 || context.currentTime < next - 0.05,
     });
     raf = requestAnimationFrame(tick);

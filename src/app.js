@@ -1,6 +1,6 @@
 import { createAvatar } from "./avatar.js";
 import { createConversation } from "./session.js";
-import { createStore, loadSettings, saveSettings } from "./memory.js";
+import { bundledGeminiKey, createStore, effectiveGeminiKey, loadSettings, saveSettings } from "./memory.js";
 import { KOCAELI, localForecast, research, sourceLabels } from "./search.js";
 import { createDemoDevices, createHomeAssistant, deviceLabel, runHomeCommand } from "./smarthome.js";
 import { emotionFromText, sanitizeFinal } from "./text.js";
@@ -36,7 +36,10 @@ export function mount(doc, hooks = {}) {
     getSettings: () => settings,
     onViseme: (shape) => avatar.setViseme(shape),
     onSpeakStart: () => hooks.onSpeaking?.(true),
-    onSpeakEnd: () => hooks.onSpeaking?.(false),
+    onSpeakEnd: () => {
+      avatar.setUtterance("");
+      hooks.onSpeaking?.(false);
+    },
   });
 
   const session = createConversation({
@@ -54,6 +57,7 @@ export function mount(doc, hooks = {}) {
       doc.documentElement.style.setProperty("--level", String(Math.min(1, rms * 4)));
     },
     onAudio: (level) => avatar.setAudio(level),
+    onUtterance: (text) => avatar.setUtterance(text),
     onUser: addUser,
     onAssistant: addAssistant,
     onMemories: async (facts) => {
@@ -72,6 +76,7 @@ export function mount(doc, hooks = {}) {
       return result;
     },
     speakFallback: (text, style) => {
+      avatar.setUtterance(text);
       if (!soundOn) return;
       voice.speak(text, style);
     },
@@ -286,7 +291,16 @@ export function mount(doc, hooks = {}) {
   }
 
   function showGate() {
-    doc.querySelector("#gate").hidden = Boolean(settings.geminiKey || settings.geminiSkipped);
+    const hasKey = Boolean(effectiveGeminiKey(settings));
+    doc.querySelector("#gate").hidden = hasKey || settings.geminiSkipped;
+    const note = doc.querySelector("#gemini-note");
+    if (note) {
+      note.textContent = settings.geminiKey
+        ? "Bu cihazdaki anahtar, yerleşik anahtarın önüne geçer."
+        : bundledGeminiKey()
+          ? "Yerleşik anahtar açık. Buraya yazarsan yalnız bu telefonda onun yerine geçer."
+          : "Anahtar yoksa ilk açılış sorar. Yazarsan yalnız bu telefonda kalır.";
+    }
   }
 
   doc.querySelector("#gate-save").addEventListener("click", () => {
@@ -449,6 +463,22 @@ export function mount(doc, hooks = {}) {
   doc.querySelector("#set-token").value = settings.haToken || "";
   doc.querySelector("#build-line").textContent = `Sürüm ${__ERO_BUILD__}`;
   showGate();
+  if (new URLSearchParams(location.search).get("demo") === "1") {
+    settings = { ...settings, geminiSkipped: true };
+    showGate();
+    const line = "Merhaba, ben ERO. Bugün sesin çok net geliyor.";
+    setTimeout(() => {
+      avatar.setEmotion("joy");
+      avatar.setMode("speak");
+      avatar.setUtterance(line);
+    }, 600);
+    setTimeout(() => avatar.setMode("think"), 5200);
+    setTimeout(() => avatar.setMode("listen"), 7600);
+    setTimeout(() => {
+      avatar.setEmotion("");
+      avatar.setMode("idle");
+    }, 9800);
+  }
   showRiddle();
   paintDevices();
   paintState("idle");

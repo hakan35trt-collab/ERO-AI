@@ -30,7 +30,15 @@ jobs:
       - name: Test
         run: npm test
       - name: Derle
-        run: npm run build
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "$VITE_GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY secret is available to the build."
+          else
+            echo "GEMINI_API_KEY secret is empty. The first-run key screen stays."
+          fi
+          npm run build
       - name: Sayfa paketini yükle
         uses: actions/upload-pages-artifact@v3
         with:

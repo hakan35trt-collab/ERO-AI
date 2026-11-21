@@ -22,7 +22,7 @@ npm run preview
 1. Siteyi **Chrome** ile aç.
 2. “ERO’yu ana ekrana ekle” bandına dokun veya Chrome menüsünden **Yükle** / **Ana ekrana ekle**’yi seç.
 3. Ana ekrandaki ERO simgesinden aç.
-4. İlk açılışta ücretsiz Gemini anahtarını yapıştır. Anahtar yalnızca bu tarayıcının `localStorage` alanına yazılır.
+4. Site bir anahtarla derlendiyse ERO onu kendisi kullanır. İstersen Ayarlar’dan kendi anahtarını yazarsın; o, yerleşik anahtarın önüne geçer ve yalnız bu telefonda kalır. Derlemede anahtar yoksa ilk açılışta istenir.
 
 iPhone’da Safari’nin Paylaş menüsünden **Ana Ekrana Ekle** kullanılır. Canlı mikrofon orada sınırlıdır; yazarak da konuşabilirsin.
 
@@ -44,9 +44,15 @@ Ayarlardaki **Yalnızca “ERO” deyince uyan** kapalı başlar. Açılırsa ye
 
 Klavyeden de yazılır. Sohbet balonları sohbet sekmesindedir.
 
+## Gemini anahtarı
+
+Anahtar depoya yazılmaz. GitHub’da **Settings → Secrets and variables → Actions** altına `GEMINI_API_KEY` eklenir. `.github/workflows/pages.yml` derleme adımında bunu `VITE_GEMINI_API_KEY` olarak verir. Gizli değer günlükte basılmaz. Sır boşsa derleme yine biter ve ilk açılıştaki anahtar ekranı durur. Sır eklendikten sonra iş akışını yeniden çalıştırmak veya `main`’e yeni bir push, anahtarlı sürümü yayınlar.
+
+Yerleşik anahtar, sayfanın herkese açık paketinin içine gömülür. Telefonda `localStorage` boşsa ERO onu kullanır. Ayarlar’daki alan doluysa o kullanılır. Tek seferlik kurulum bağlantısı `#key=` ile biter: anahtar telefona yazılır ve adres çubuğundan silinir. Bağlantıyı kimseyle paylaşma.
+
 ## Ses hattı
 
-Anahtar [Google AI Studio](https://aistudio.google.com/apikey) üzerinden alınır. Depoya, iş akışına veya bir sunucuya hiç yazılmaz. Ayarlar ekranındaki alan da aynı yerel depoya gider.
+Anahtar [Google AI Studio](https://aistudio.google.com/apikey) üzerinden alınır. El ile yapıştırılan kopya yalnız bu tarayıcının `localStorage` alanındadır.
 
 1. **Canlı konuşma:** tarayıcıdan Gemini Live WebSocket. Modeller sırayla `gemini-omni-flash-preview`, sonra `gemini-omni-1.2-flash`. Ses **Charon** (sıcak erkek). Giriş 16 kHz PCM, çıkış 24 kHz PCM. Sessizlik eşiği 700 ms.
 2. Canlı hat açılmazsa: mikrofon + yerel sessizlik algısı, metin için `gemini-3.5-flash-lite` (503/429 olursa yeniden dener, sonra `gemini-3.8-flash`), ses için `gemini-2.5-flash-preview-tts` ve yine Charon. Cümle cümle okunur.
@@ -54,9 +60,13 @@ Anahtar [Google AI Studio](https://aistudio.google.com/apikey) üzerinden alın�
 
 ## Portre
 
-Ortadaki yüz, `public/avatar/` altındaki fotoğraf kareleridir. Hepsi aynı kadrajda **864×1152** JPG.
+Yüz, `public/avatar/base.jpg` üzerine gerilmiş bir 2.5D kafestir. `scripts/generate-rig.py` MediaPipe Face Landmarker ile 478 noktayı ve üçgenleri `public/avatar/rig.json` dosyasına yazar. Saç, boyun, ceket ve kenar için ek düğümler vardır; ceket ve ERO yazısı oynamaz. Tarayıcı bu ağı WebGL ile her karede yay gibi yumuşatarak eğer. Çene açılınca ağız boşluğu ve `viseme-a` / `viseme-i` diş şeridi görünür. Göz bebeği bakışla kayar, göz kapağı üstünü örter. Eski kareler WebGL açılmazsa yedek olarak durur. Çözünürlük en fazla 2 katına çıkar.
 
-Ham kareler `public/avatar/raw/`:
+Duygu etiketleri `[mutlu]` `[üzgün]` `[şaşkın]` `[korkmuş]` `[kızgın]` `[düşünceli]` `[sakin]` `[utangaç]` yaklaşık yarım saniyede karışır ve konuşmanın üstüne biner. Boşta nefes, küçük baş salınımı, bakış sıçraması ve kırpma vardır. Dinlerken baş sallanır ve kaşlar kalkar. Düşünürken bakış yukarı ve yana kayar.
+
+Ham kareler `public/avatar/raw/` altındadır ve WebGL yedeği için durur. Hepsi **864×1152** JPG.
+
+Ham dosyalar:
 
 | Dosya | Ne |
 | --- | --- |
@@ -71,9 +81,7 @@ Ham kareler `public/avatar/raw/`:
 | `expr-surprised.jpg` | Şaşırma |
 | `expr-thinking.jpg` | Yukarı-yana bakış |
 
-`node scripts/generate-avatar.mjs` ceket logosuna göre küçük kaymayı ölçer. Ağız, göz, kaş, duygu ve baş kareleri tüylü elips olarak tabanın üzerine oturur; ERO yazısı tabanda kalır ve aynalanmaz. `eye-left` gelen dosyadan değil, `eye-right` göz bölgesinin yatay aynasından üretilir. `head-right` de `head-left` yüzünün aynasıdır. Duygu etiketleri `[mutlu]` `[üzgün]` `[şaşkın]` `[korkmuş]` `[kızgın]` `[düşünceli]` `[sakin]` `[utangaç]` yanıtın başında durur, ekranda ve seste silinir. Boşta bakış, kırpma, kaş ve küçük baş hareketi 180 ms’de erir. Dinlerken baş iner ve kaş kalkar. Düşünürken göz yukarı, şaşkın yüz ve çatık kaş gelir. Dosya adları `public/avatar/manifest.json` içindedir. Ham kareyi değiştirip betiği yeniden çalıştırmak yeter.
-
-Portre nefes alır gibi hafifçe büyür ve birkaç piksel yana sallanır. Arkada neon halka ve ufuk çizgisi vardır.
+Kafesi yeniden üretmek için `python3 scripts/generate-rig.py` yeter. Yedek yamalar `node scripts/generate-avatar.mjs` ile gelir. `eye-left` ve `head-right` aynalanmış halleriyle durur; ERO yazısı okunur kalır.
 
 ## Bellek, araştırma, ev
 
@@ -95,6 +103,7 @@ Yerelde `http://127.0.0.1:8731` de eklenir. Tuya bağdaştırıcısı aynı aray
 - Canlı Türkçe kalitesi modele göre değişir. Olmazsa cümle cümle Gemini sesi, o da olmazsa cihazın kendi sesi devreye girer.
 - Anahtarsız LLM7 ve Pollinations paylaşımlı kotadadır; ilk yanıttan sonra bir süre “hat dolu” diyebilir.
 - Konuşmayı yazıya dökmek, Gemini canlı hattı dışında Chrome ve Android’e bağlıdır.
-- Düşünme karesinde baş hafif kaymış olabilir. Tam kare erimesi bunu gizlemez; ağız ve göz yamaları taban portreye oturur.
+- Yüz kafesi fotoğrafı eğer; gerçek kas modeli değildir. Çok açık ağızda dudak kenarı biraz gerilebilir.
+- Yerleşik Gemini anahtarı sitenin paketinde durur. Gören herkes onu okuyabilir. Kendi kotanı paylaşmak istemezsen Ayarlar’dan boş bırakma, sır kullanma.
 - Demo cihazlar sayfa yenilenince sıfırlanır. Anılar ve anahtar yalnız bu tarayıcıdadır.
 - Home Assistant için CORS şarttır. Tuya kapalıdır.

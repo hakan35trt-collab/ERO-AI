@@ -152,7 +152,8 @@
       <header><h2>Ayarlar</h2><button type="button" data-close="sheet-settings">Kapat</button></header>
       <form id="settings-form">
         <label for="set-gemini">Gemini anahtarı</label>
-        <input id="set-gemini" type="password" autocomplete="off" placeholder="Yalnızca bu cihazda kalır" />
+        <input id="set-gemini" type="password" autocomplete="off" placeholder="Boşsa yerleşik anahtar kullanılır" />
+        <p id="gemini-note" class="hint"></p>
         <label class="check"><input id="set-wake" type="checkbox" /> Yalnızca “ERO” deyince uyan</label>
         <label class="check"><input id="set-home" type="checkbox" /> Home Assistant kullan</label>
         <label for="set-ha">Adres</label>

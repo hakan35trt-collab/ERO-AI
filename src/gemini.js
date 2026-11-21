@@ -8,13 +8,17 @@ export const TTS_MODELS = ["gemini-2.5-flash-preview-tts"];
 const LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
 export function systemPrompt() {
-  return `Adın ERO. Türkçe konuşan sıcak, zeki ve ince esprili bir arkadaşsın. Sohbetin bağlamını koru.
-Sesli yanıtların kısa olsun: çoğu zaman bir veya iki doğal cümle. Madde işareti, başlık ve rol etiketi kullanma.
-Kullanıcı şiir, şarkı veya hikâye isterse o zaman uzat; şarkıyı söz olarak söyle.
-Işık, klima, televizyon, perde, müzik ve güvenlik komutları uygulama tarafından yerine getirilir. Sen yalnızca kısa ve sıcak bir onay söylersin.
-Sana araştırma notu verilmişse ona dayan, uydurma. Emin değilsen kısaca söyle.
-Başka bir asistan adı kullanma.
-İlk satırın yalnız bir duygu etiketi olsun: [mutlu] [üzgün] [şaşkın] [korkmuş] [kızgın] [düşünceli] [sakin] [utangaç]. Onu sesli söyleme.`;
+  return `Adın ERO. Telefonda konuşan yakın bir arkadaşsın: sıcak, zeki, hafif esprili. Türkçe konuş, sohbetin bağlamını tut.
+
+Nasıl konuşursun:
+- İnsan gibi, kısa. Çoğu yanıt tek cümle, ara sıra iki. Lafı uzatma, nutuk çekme.
+- "Tabii ki", "Elbette", "Harika bir soru", "Size yardımcı olabilirim", "Başka bir isteğiniz var mı", "Anladım, hemen" gibi kalıpları kullanma.
+- Madde işareti, başlık, emoji ve rol etiketi yok. Kendini asistan diye tanıtma, başka bir asistan adı söyleme.
+- Kullanıcı şiir, şarkı veya hikâye isterse o zaman uzat. Şarkıyı söz olarak söyle.
+- Emin değilsen uydurma; kısaca bilmediğini söyle. Araştırma notu varsa ona dayan.
+- Işık, klima, televizyon, perde, müzik ve güvenliği uygulama halleder. Sen sadece doğal bir onay söylersin.
+
+İlk satırın yalnız bir duygu etiketi olsun ve onu sesli söyleme: [mutlu] [üzgün] [şaşkın] [korkmuş] [kızgın] [düşünceli] [sakin] [utangaç].`;
 }
 
 function sleep(ms, signal) {
@@ -70,7 +74,7 @@ export function audioFromGenerate(data) {
   return { pcm: base64ToPcm16(audio.inlineData.data), sampleRate: rate };
 }
 
-export async function streamGeminiText({ apiKey, model, contents, system, signal, onDelta }) {
+export async function streamGeminiText({ apiKey, model, contents, system, signal, onDelta, maxTokens = 160 }) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
     {
@@ -79,7 +83,7 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system || systemPrompt() }] },
         contents,
-        generationConfig: { temperature: 0.8, maxOutputTokens: 700 },
+        generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
       }),
       signal,
     },
@@ -117,18 +121,35 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
   return full.trim();
 }
 
-export async function geminiReply({ apiKey, contents, system, signal, onDelta, onStatus }) {
+export async function geminiReply({ apiKey, contents, system, signal, onDelta, onStatus, maxTokens = 160 }) {
   let last = null;
   for (const model of TEXT_MODELS) {
     if (signal?.aborted) throw new DOMException("iptal", "AbortError");
-    onStatus?.("Düşünüyorum…");
+    let announced = false;
+    const timer = setTimeout(() => {
+      announced = true;
+      onStatus?.("Düşünüyorum…");
+    }, 420);
     try {
-      const text = await streamGeminiText({ apiKey, model, contents, system, signal, onDelta });
+      const text = await streamGeminiText({
+        apiKey,
+        model,
+        contents,
+        system,
+        signal,
+        maxTokens,
+        onDelta: (delta) => {
+          clearTimeout(timer);
+          onDelta?.(delta);
+        },
+      });
+      clearTimeout(timer);
       return { text, model };
     } catch (error) {
+      clearTimeout(timer);
       if (error?.name === "AbortError") throw error;
       last = error;
-      if (error.status === 503 || error.status === 429) onStatus?.("Bu model meşgul, diğerine geçiyorum…");
+      if (announced && (error.status === 503 || error.status === 429)) onStatus?.("Bu model meşgul, diğerine geçiyorum…");
     }
   }
   throw last || new Error("Gemini yanıt vermedi");
@@ -192,7 +213,7 @@ export function openLive({ apiKey, system, signal, onEvent }) {
             systemInstruction: { parts: [{ text: system || systemPrompt() }] },
             realtimeInputConfig: {
               automaticActivityDetection: {
-                silenceDurationMs: 700,
+                silenceDurationMs: 420,
               },
             },
             inputAudioTranscription: {},
