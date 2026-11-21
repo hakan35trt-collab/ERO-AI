@@ -54,27 +54,16 @@ jobs:
 
       - name: İmza
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ERO_SIGNING_PASSPHRASE: ${{ secrets.ERO_SIGNING_PASSPHRASE }}
           ERO_KEYSTORE_BASE64: ${{ secrets.ERO_KEYSTORE_BASE64 }}
           ERO_KEYSTORE_PASSWORD: ${{ secrets.ERO_KEYSTORE_PASSWORD }}
           ERO_KEY_ALIAS: ${{ secrets.ERO_KEY_ALIAS }}
           ERO_KEY_PASSWORD: ${{ secrets.ERO_KEY_PASSWORD }}
         run: |
-          if [ -n "$ERO_KEYSTORE_BASE64" ] && [ -n "$ERO_KEYSTORE_PASSWORD" ] && [ -n "$ERO_KEY_ALIAS" ] && [ -n "$ERO_KEY_PASSWORD" ]; then
-            echo "Release keystore secrets are available."
-            printf '%s' "$ERO_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ero.keystore"
-          else
-            echo "Release keystore secrets are empty. Signing with a debug keystore so the build still produces an APK."
-            keytool -genkeypair -keystore "$RUNNER_TEMP/ero.keystore" -storepass android -alias erodebug -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ERO, OU=ERO, O=ERO, L=Kocaeli, C=TR"
-            ERO_KEYSTORE_PASSWORD=android
-            ERO_KEY_ALIAS=erodebug
-            ERO_KEY_PASSWORD=android
-          fi
-          {
-            echo "ERO_KEYSTORE_FILE=$RUNNER_TEMP/ero.keystore"
-            echo "ERO_KEYSTORE_PASSWORD=$ERO_KEYSTORE_PASSWORD"
-            echo "ERO_KEY_ALIAS=$ERO_KEY_ALIAS"
-            echo "ERO_KEY_PASSWORD=$ERO_KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+          bash scripts/release-signing.sh self-test
+          bash scripts/release-signing.sh
 
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -106,7 +95,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NOTES=$(printf 'version: %s\n\nERO telefon uygulaması. ERO.apk dosyasını indirip kur.\n' "$VERSION")
+          NOTES=$(printf 'version: %s\n\nERO telefon uygulaması. ERO.apk dosyasını indirip kur.\nSertifika SHA-256: %s\n' "$VERSION" "$ERO_CERT_SHA256")
           gh release create "v$VERSION" ERO.apk --title "ERO $VERSION" --notes "$NOTES" --latest
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest ERO.apk --title "ERO latest" --notes "$NOTES" --prerelease

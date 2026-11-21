@@ -34,25 +34,18 @@ Paket `com.ero.ai`, uygulama adı ERO. `android/` Jetpack Compose kabuğudur. Or
 
 Kurmak için APK’yı telefona al, dosyadan aç ve bilinmeyen uygulamalara izin ver. Play Store gerekmez. Yeni bir imza anahtarına geçilirse eski kurulum önce kaldırılır.
 
-`.github/workflows/android.yml` her `main` push’unda APK’yı derler ve `v1.0.<çalıştırma>` ile `latest` etiketli sürümlere `ERO.apk` olarak koyar. Yayın imzası için depoda şu sırlar durur:
+`.github/workflows/android.yml` her `main` push’unda APK’yı derler ve `v1.0.<çalıştırma>` ile `latest` etiketli sürümlere `ERO.apk` olarak koyar. İmza her sürümde aynı anahtarla atılır. Günlükte parola veya anahtar değeri basılmaz.
 
 | Sır | Ne |
 | --- | --- |
-| `ERO_KEYSTORE_BASE64` | `keytool` ile üretilen `.jks` dosyasının base64 hali |
-| `ERO_KEYSTORE_PASSWORD` | Deponun parolası |
-| `ERO_KEY_ALIAS` | Anahtar takma adı, öneri `ero` |
-| `ERO_KEY_PASSWORD` | Anahtarın parolası |
-| `GEMINI_API_KEY` | Web derlemesiyle aynı anahtar |
+| `ERO_KEYSTORE_BASE64`, `ERO_KEYSTORE_PASSWORD`, `ERO_KEY_ALIAS`, `ERO_KEY_PASSWORD` | Dördü birden doluysa yayın bu anahtarı kullanır |
+| `ERO_SIGNING_PASSPHRASE` | İsteğe bağlı. Doluysa şifreli imza paketinin parolası budur ve `GEMINI_API_KEY` türevinin önüne geçer |
+| `GEMINI_API_KEY` | Web derlemesiyle aynı anahtar. Dört imza sırrı ve `ERO_SIGNING_PASSPHRASE` boşsa paket parolası bundan ve sabit bir tuzdan türetilir |
 | `YOUTUBE_API_KEY` | İsteğe bağlı. Yoksa YouTube aramayı açar, ilk videoyu seçemez |
 
-Anahtar bir kez üretilir ve depoya yazılmaz:
+Dört imza sırrı yoksa iş akışı `signing-key` ön sürümündeki `signing.enc` dosyasını indirir. Bu dosya AES-256-CBC ve PBKDF2 (210000 tur) ile şifrelidir. İçinde anahtar deposu ve rastgele parolalar vardır. Dosya yoksa bir kez üretilir ve aynı sürüme yüklenir. Çözülemezse derleme durur; ikinci bir anahtar üretilmez.
 
-```bash
-keytool -genkeypair -keystore ero.jks -storepass 'PAROLA' -alias ero -keypass 'PAROLA' -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ERO, OU=ERO, O=ERO, L=Kocaeli, C=TR"
-base64 -w 0 ero.jks
-```
-
-Dört imza sırrı boşsa derleme hata vermez; geçici bir debug anahtarıyla imzalar ve APK’yı yine yayınlar. Günlükte parola veya anahtar değeri basılmaz.
+`GEMINI_API_KEY` değiştirilirse, paket o anahtardan türetildiyse bir sonraki imza açılmaz. Anahtarı döndürmeden önce `ERO_SIGNING_PASSPHRASE` sırını koy. Bu sır, türev parolanın önüne geçer. Paket zaten eski anahtarla yazıldıysa, o parolayı bu sırra koymadan API anahtarını değiştirmek imzayı bozar. `signing-key` sürümünü silmek yeni bir sertifika üretir; kurulu uygulama o APK’nın üstüne yazılamaz, bir kez kaldırılır.
 
 Açılışta GitHub’daki son sürüme bakılır. Daha yeniyse Türkçe bir soru çıkar, APK inder ve kurulum ekranı açılır.
 
