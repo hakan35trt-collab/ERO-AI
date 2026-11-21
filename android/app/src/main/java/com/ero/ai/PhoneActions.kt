@@ -46,8 +46,14 @@ class PhoneActions(private val activity: MainActivity) {
             "setAlarm" -> setAlarm(args.optInt("hour", -1), args.optInt("minute", -1), args.optString("label"))
             "setTimer" -> setTimer(args.optInt("seconds", 0), args.optString("label"))
             "callContact" -> callContact(args.optString("name"))
-            "sendSms" -> sendSms(args.optString("name"), args.optString("text"))
-            "whatsapp" -> whatsapp(args.optString("name"), args.optString("text"))
+            "sendSms" -> {
+                if (!args.optBoolean("confirmed")) JSONObject().put("ok", false).put("need_yes", true).put("say", "Bu mesajı göndermemi onaylıyor musun?")
+                else sendSms(args.optString("name"), args.optString("text"))
+            }
+            "whatsapp" -> {
+                if (!args.optBoolean("confirmed")) JSONObject().put("ok", false).put("need_yes", true).put("say", "WhatsApp yazmamı onaylıyor musun?")
+                else whatsapp(args.optString("name"), args.optString("text"))
+            }
             "flashlight" -> flashlight(args.optBoolean("on"))
             "volume" -> volume(args.optString("direction"), args.optInt("level", -1))
             "brightness" -> brightness(args.optInt("level", -1))
@@ -58,13 +64,70 @@ class PhoneActions(private val activity: MainActivity) {
             "notifications" -> EroNotificationService.snapshot()
             "navigate" -> navigate(args.optString("query"))
             "share" -> share(args.optString("text"))
+            "policy" -> policy(args.optString("name"))
+            "setPolicy" -> setPolicy(args.optString("name"), args.optBoolean("confirm"))
+            "remember" -> JSONObject().put("ok", true).put("say", EroStore.addMemory(activity, args.optString("text")))
+            "forget" -> JSONObject().put("ok", true).put("say", EroStore.forget(activity, args.optString("text")))
+            "addReminder" -> JSONObject().put("ok", true).put("say", CommandDesk.perform(activity, "reminder", JSONObject().put("text", args.optString("text")), true).say)
+            "tasks" -> taskList()
+            "memories" -> memoryList()
+            "logs" -> logList()
             "screenText" -> screen { it.readScreen() }
-            "tap" -> screen { it.tap(args.optString("text")) }
+            "tap" -> {
+                val text = args.optString("text")
+                if (dangerousText(text) && !args.optBoolean("confirmed")) {
+                    JSONObject().put("ok", false).put("need_yes", true).put("say", "Ekranda buna basmamı onaylıyor musun?")
+                } else screen { it.tap(text) }
+            }
             "scroll" -> screen { it.scroll(args.optString("direction", "down")) }
-            "typeText" -> screen { it.typeText(args.optString("text")) }
+            "typeText" -> {
+                val text = args.optString("text")
+                if (dangerousText(text) && !args.optBoolean("confirmed")) {
+                    JSONObject().put("ok", false).put("need_yes", true).put("say", "Bu metni yazmamı onaylıyor musun?")
+                } else screen { it.typeText(text) }
+            }
             "nav" -> screen { it.global(args.optString("action", "back")) }
             else -> JSONObject().put("ok", false).put("error", "Bu komutu tanımıyorum.")
         }
+    }
+
+    private fun policy(name: String): JSONObject {
+        val spec = CommandDesk.specs.firstOrNull { it.id == name }
+        return JSONObject()
+            .put("ok", true)
+            .put("confirm", CommandDesk.confirm(activity, name))
+            .put("floor", spec?.floor == true)
+    }
+
+    private fun setPolicy(name: String, confirm: Boolean): JSONObject {
+        CommandDesk.setConfirm(activity, name, confirm)
+        return JSONObject().put("ok", true)
+    }
+
+    private fun taskList(): JSONObject {
+        val items = org.json.JSONArray()
+        for (task in EroStore.tasks(activity)) {
+            items.put(JSONObject().put("title", task.title).put("at", task.at).put("done", task.done))
+        }
+        return JSONObject().put("ok", true).put("items", items)
+    }
+
+    private fun memoryList(): JSONObject {
+        val items = org.json.JSONArray()
+        for (row in EroStore.memories(activity)) items.put(row.text)
+        return JSONObject().put("ok", true).put("items", items)
+    }
+
+    private fun logList(): JSONObject {
+        val items = org.json.JSONArray()
+        for (row in EroStore.logs(activity)) {
+            items.put(JSONObject().put("action", row.action).put("detail", row.detail).put("at", row.at))
+        }
+        return JSONObject().put("ok", true).put("items", items)
+    }
+
+    private fun dangerousText(text: String): Boolean {
+        return Regex("öde|odeme|satın al|satin al|sil\\b|delete|transfer|purchase|\\bpay\\b|gönder|gonder", RegexOption.IGNORE_CASE).containsMatchIn(text)
     }
 
     private fun screen(block: (EroAccessibilityService) -> JSONObject): JSONObject {

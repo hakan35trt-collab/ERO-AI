@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -53,17 +56,21 @@ private val glow = Color(0xFF2EE6D6)
 private val blue = Color(0xFF4AA8FF)
 private val card = Color(0xFF101A2C)
 
-enum class ShellPage { Home, Write, Apps, Voice }
+enum class ShellPage { Home, Write, Apps, Voice, Commands, Tasks, Memory, Safety }
 
 class ShellModel : ViewModel() {
     var page by mutableStateOf(ShellPage.Home)
     var status by mutableStateOf("Hazırım.")
     var level by mutableStateOf(0f)
     var draft by mutableStateOf("")
+    var taskDraft by mutableStateOf("")
+    var memoryDraft by mutableStateOf("")
     var appName by mutableStateOf("")
     var sensitivity by mutableStateOf(0.65f)
     var verify by mutableStateOf(false)
     var busy by mutableStateOf(false)
+    var revision by mutableStateOf(0)
+    var pending by mutableStateOf<DeskResult?>(null)
     val lines = mutableStateListOf<String>()
 
     fun bind(activity: MainActivity) {
@@ -78,23 +85,68 @@ class ShellModel : ViewModel() {
         lines.add("Sen: $clean")
         status = "Bir saniye."
         viewModelScope.launch {
+            EroStore.addTurn(activity, "user", clean)
+            val waiting = pending
+            if (waiting != null && isNo(clean)) {
+                pending = null
+                finish(activity, speech, "Tamam, vazgeçtim.")
+                return@launch
+            }
+            if (waiting != null && isYes(clean)) {
+                pending = null
+                finish(activity, speech, resolve(activity, waiting, true))
+                return@launch
+            }
             val history = lines.map { line ->
                 if (line.startsWith("Sen: ")) "user" to line.removePrefix("Sen: ")
                 else "model" to line.removePrefix("ERO: ")
             }
-            val reply = GeminiBrain.reply(history.dropLast(1), clean)
-            var say = reply.text
-            if (!reply.appName.isNullOrBlank()) {
-                val opened = PhoneActions(activity).run("openApp", JSONObject().put("name", reply.appName))
-                say = if (opened.optBoolean("ok")) "${opened.optString("label", reply.appName)} açıldı."
-                else "Bu uygulamayı bulamadım."
-            }
-            if (say.isBlank()) say = "Tamam."
-            lines.add("ERO: $say")
-            status = say
-            speech.speak(say)
-            busy = false
+            val reply = GeminiBrain.reply(history.dropLast(1), clean, contextNote(activity))
+            val call = reply.calls.firstOrNull()
+            val say = if (call == null) reply.text.ifBlank { "Tamam." }
+            else resolve(activity, DeskResult("", false, call.name, call.args), false)
+            finish(activity, speech, say)
         }
+    }
+
+    fun command(activity: MainActivity, speech: EroSpeech, name: String, args: JSONObject = JSONObject()) {
+        if (busy) return
+        busy = true
+        status = "Bir saniye."
+        viewModelScope.launch {
+            finish(activity, speech, resolve(activity, DeskResult("", false, name, args), false))
+        }
+    }
+
+    private fun contextNote(activity: MainActivity): String {
+        val memories = EroStore.memories(activity).take(8).joinToString("; ") { it.text }
+        val tasks = EroStore.openTasks(activity).take(8).joinToString("; ") { "${Reminders.label(it.at)} ${it.title}" }
+        return "Hatırlananlar: $memories. Açık görevler: $tasks."
+    }
+
+    private suspend fun resolve(activity: MainActivity, job: DeskResult, confirmed: Boolean): String {
+        if (job.name == "screen") {
+            if (!confirmed && CommandDesk.confirm(activity, "screen")) {
+                pending = job
+                return "Ekrana bakmamı onaylıyor musun?"
+            }
+            val say = ScreenLook.analyze(activity)
+            EroStore.addLog(activity, "screen", say)
+            return say
+        }
+        val result = CommandDesk.perform(activity, job.name, job.args, confirmed)
+        if (result.needYes) pending = result
+        return result.say
+    }
+
+    private suspend fun finish(activity: MainActivity, speech: EroSpeech, say: String) {
+        val line = say.ifBlank { "Tamam." }
+        lines.add("ERO: $line")
+        EroStore.addTurn(activity, "model", line)
+        status = line
+        revision += 1
+        busy = false
+        speech.speak(line)
     }
 
     fun talk(activity: MainActivity, speech: EroSpeech) {
@@ -177,8 +229,12 @@ fun EroShell(activity: MainActivity, speech: EroSpeech, model: ShellModel = view
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("ERO", color = glow, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Row {
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
                     TextButton(onClick = { model.page = ShellPage.Home }) { Text("Ana") }
+                    TextButton(onClick = { model.page = ShellPage.Commands }) { Text("Komut") }
+                    TextButton(onClick = { model.page = ShellPage.Tasks }) { Text("Görev") }
+                    TextButton(onClick = { model.page = ShellPage.Memory }) { Text("Hafıza") }
+                    TextButton(onClick = { model.page = ShellPage.Safety }) { Text("Güvenlik") }
                     TextButton(onClick = { model.page = ShellPage.Voice }) { Text("Ses") }
                 }
             }
@@ -187,6 +243,10 @@ fun EroShell(activity: MainActivity, speech: EroSpeech, model: ShellModel = view
                 ShellPage.Write -> Writer(model, speech, activity)
                 ShellPage.Apps -> Apps(model, speech, activity)
                 ShellPage.Voice -> VoicePage(model, speech, activity)
+                ShellPage.Commands -> CommandsPage(model, speech, activity)
+                ShellPage.Tasks -> TasksPage(model, speech, activity)
+                ShellPage.Memory -> MemoryPage(model)
+                ShellPage.Safety -> SafetyPage(activity, model.revision)
             }
             Text(model.status, color = Color(0xFFE8FBFF), fontSize = 16.sp)
             LinearProgressIndicator(progress = model.level, modifier = Modifier.fillMaxWidth(), color = blue, trackColor = card)
@@ -261,6 +321,121 @@ private fun VoicePage(model: ShellModel, speech: EroSpeech, activity: MainActivi
     }
     Text("Bu bir kilit değil. Emin değilse ERO bunu söyler ve yine de dinler.", color = Color(0xFF8FB4C4))
     Big("Sesimi kaydet", Modifier.fillMaxWidth()) { model.enroll(activity, speech) }
+}
+
+@Composable
+private fun ColumnScope.CommandsPage(model: ShellModel, speech: EroSpeech, activity: MainActivity) {
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Hangisi doğrudan, hangisi onayla çalışsın.", color = Color(0xFF8FB4C4))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Big("YouTube", Modifier.weight(1f)) { model.command(activity, speech, "youtube_play", JSONObject().put("query", "müzik")) }
+            Big("Bildirim", Modifier.weight(1f)) { model.command(activity, speech, "notifications") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Big("Ekran", Modifier.weight(1f)) { model.command(activity, speech, "screen") }
+            Big("Pil", Modifier.weight(1f)) { model.command(activity, speech, "battery") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Big("Fener", Modifier.weight(1f)) { model.command(activity, speech, "flashlight", JSONObject().put("on", "true")) }
+            Big("Gece", Modifier.weight(1f)) { model.command(activity, speech, "night") }
+        }
+        val tick = model.revision
+        CommandDesk.specs.forEach { spec ->
+            val confirm = if (tick >= 0) CommandDesk.confirm(activity, spec.id) else true
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(spec.title, color = Color(0xFFE8FBFF), modifier = Modifier.weight(1f))
+                if (spec.floor) Text("Her zaman onay", color = glow)
+                else Switch(confirm, {
+                    CommandDesk.setConfirm(activity, spec.id, it)
+                    model.revision += 1
+                })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.TasksPage(model: ShellModel, speech: EroSpeech, activity: MainActivity) {
+    Text("Örnek: yarın 10:00 araç muayenesi", color = Color(0xFF8FB4C4))
+    OutlinedTextField(model.taskDraft, { model.taskDraft = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Hatırlatma") })
+    Big("Kur", Modifier.fillMaxWidth()) {
+        val text = model.taskDraft
+        model.taskDraft = ""
+        model.command(activity, speech, "reminder", JSONObject().put("text", text))
+    }
+    val tick = model.revision
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        if (tick >= 0) EroStore.tasks(activity).forEach { task ->
+            Text(
+                "${if (task.done) "Bitti" else "Açık"} · ${Reminders.label(task.at)} · ${task.title}",
+                color = Color(0xFFE8FBFF),
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.MemoryPage(model: ShellModel) {
+    val activity = androidx.compose.ui.platform.LocalContext.current
+    OutlinedTextField(model.memoryDraft, { model.memoryDraft = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Bunu hatırla") })
+    Big("Kaydet", Modifier.fillMaxWidth()) {
+        model.status = EroStore.addMemory(activity, model.memoryDraft)
+        model.memoryDraft = ""
+        model.revision += 1
+    }
+    val tick = model.revision
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        if (tick >= 0) EroStore.memories(activity).forEach { row ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(row.text, color = Color(0xFFE8FBFF), modifier = Modifier.weight(1f))
+                TextButton(onClick = {
+                    EroStore.deleteMemory(activity, row.id)
+                    model.revision += 1
+                }) { Text("Sil") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.SafetyPage(activity: MainActivity, revision: Int) {
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("İzinler", color = glow, fontWeight = FontWeight.Bold)
+        val state = PhoneActions(activity).run("permissionState", JSONObject())
+        listOf(
+            "microphone" to "Mikrofon",
+            "notifications" to "Bildirim",
+            "contacts" to "Kişiler",
+            "phone" to "Arama",
+            "sms" to "SMS",
+            "camera" to "Kamera",
+            "settings_write" to "Parlaklık yazma",
+            "accessibility" to "Erişilebilirlik",
+            "notification_listener" to "Bildirim okuma",
+            "install" to "Kurulum",
+        ).forEach { (id, title) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("$title: ${if (state.optBoolean(id)) "açık" else "kapalı"}", color = Color(0xFFE8FBFF), modifier = Modifier.weight(1f))
+                TextButton(onClick = { PhoneActions(activity).run("requestPermission", JSONObject().put("id", id)) }) { Text("İzin") }
+            }
+        }
+        Text("SMS ve WhatsApp gönderme her zaman sesli onay ister. Ödeme, silme ve para aktarma da öyle.", color = Color(0xFF8FB4C4))
+        Text("Eylem günlüğü", color = glow, fontWeight = FontWeight.Bold)
+        if (revision >= 0) {
+            EroStore.logs(activity).forEach { row ->
+                Text("${row.action}: ${row.detail}", color = Color(0xFFE8FBFF))
+            }
+        }
+    }
+}
+
+private fun isYes(text: String): Boolean {
+    return Regex("^(evet|tamam|olur|onay|ara|gonder|gönder|yap|hadi|kabul)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text.trim())
+}
+
+private fun isNo(text: String): Boolean {
+    return Regex("^(hayir|hayır|yok|iptal|vazgec|vazgeç|dur|yapma)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text.trim())
 }
 
 @Composable

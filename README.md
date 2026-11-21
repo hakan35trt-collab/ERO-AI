@@ -28,7 +28,7 @@ iPhone’da Safari’nin Paylaş menüsünden **Ana Ekrana Ekle** kullanılır. 
 
 ## Android APK
 
-Paket `com.ero.ai`, uygulama adı ERO. `android/` Jetpack Compose kabuğudur. Ortada mevcut portre bir WebView’de durur. Anahtar ekranı yoktur; `GEMINI_API_KEY` derlemeye gömülür. Model sessizce değişir, kullanıcıya teknik hata gösterilmez. Ses ekranında hassasiyet, cihaz destekliyorsa gürültü bastırma ve deneysel ses izi vardır. Önce paketin içindeki derlemeyi açar. `version.json` sayfadaki sürümden yeniyse [GitHub Pages](https://hakan35trt-collab.github.io/ERO-AI/) adresine geçer.
+Paket `com.ero.ai`, uygulama adı ERO. `android/` Jetpack Compose kabuğudur. Ortada mevcut portre bir WebView’de durur. Anahtar ekranı yoktur; `GEMINI_API_KEY` derlemeye gömülür. Model sessizce değişir, kullanıcıya teknik hata gösterilmez. Ses ekranında hassasiyet, cihaz destekliyorsa gürültü bastırma ve deneysel ses izi vardır. Komut, görev, hafıza ve güvenlik ekranları telefonda durur. Hatırlatma tam saat izni varsa kurcalanır, yoksa sistem yaklaşık haber verir. Ekran analizi erişilebilirlik açıkken görüntü, yazı tanıma ve modele bakmayı dener. Wi-Fi ve Bluetooth radyo anahtarı değil, ayar panelidir. SMS ve WhatsApp göndermek her zaman sesli onay ister. Önce paketin içindeki derlemeyi açar. `version.json` sayfadaki sürümden yeniyse [GitHub Pages](https://hakan35trt-collab.github.io/ERO-AI/) adresine geçer.
 
 İndirme: [ERO.apk](https://github.com/hakan35trt-collab/ERO-AI/releases/latest/download/ERO.apk). Ayarlar’daki **APK indir** de aynı adrese gider.
 

@@ -109,9 +109,22 @@ export function isNo(text) {
   return /^(hayir|hayır|yok|iptal|vazgec|vazgeç|dur|yapma)\b/.test(clean);
 }
 
+function policyWantsConfirm(name) {
+  if (!onAndroid()) return null;
+  const id = name === "youtube_search" || name === "youtube_play" ? "youtube"
+    : name === "remember" || name === "forget" ? "memory"
+      : name;
+  const data = nativeCall("policy", { name: id });
+  return typeof data.confirm === "boolean" ? data.confirm : null;
+}
+
 export function needsSpokenYes(name, args = {}) {
+  if (name === "send_sms" || name === "whatsapp") return true;
+  if ((name === "tap" || name === "type_text") && DANGER.test(`${args.text || ""} ${args.query || ""}`)) return true;
+  const policy = policyWantsConfirm(name);
+  if (policy === true) return true;
+  if (policy === false) return false;
   if (SENSITIVE.has(name)) return true;
-  if (name === "tap" || name === "type_text") return DANGER.test(`${args.text || ""} ${args.query || ""}`);
   return false;
 }
 
@@ -186,8 +199,8 @@ async function execute(name, args) {
     set_alarm: ["setAlarm", { hour: Number(args.hour), minute: Number(args.minute), label: args.label || "" }],
     set_timer: ["setTimer", { seconds: Number(args.seconds), label: args.label || "" }],
     call_contact: ["callContact", { name: args.name }],
-    send_sms: ["sendSms", { name: args.name, text: args.text }],
-    whatsapp: ["whatsapp", { name: args.name, text: args.text }],
+    send_sms: ["sendSms", { name: args.name, text: args.text, confirmed: true }],
+    whatsapp: ["whatsapp", { name: args.name, text: args.text, confirmed: true }],
     flashlight: ["flashlight", { on: Boolean(args.on) }],
     volume: ["volume", { direction: args.direction || "up", level: args.level }],
     brightness: ["brightness", { level: args.level }],
@@ -199,9 +212,12 @@ async function execute(name, args) {
     navigate: ["navigate", { query: args.query }],
     share: ["share", { text: args.text }],
     screen_read: ["screenText", {}],
-    tap: ["tap", { text: args.text }],
+    tap: ["tap", { text: args.text, confirmed: true }],
     scroll: ["scroll", { direction: args.direction || "down" }],
-    type_text: ["typeText", { text: args.text }],
+    type_text: ["typeText", { text: args.text, confirmed: true }],
+    remember: ["remember", { text: args.text }],
+    forget: ["forget", { text: args.text }],
+    add_reminder: ["addReminder", { text: args.text }],
     nav_key: ["nav", { action: args.action || "back" }],
   };
   const pair = map[name];
@@ -289,6 +305,9 @@ export const PHONE_TOOLS = [
   { name: "scroll", description: "Ekranı kaydırır. direction: up veya down.", parameters: { type: "OBJECT", properties: { direction: { type: "STRING" } } } },
   { name: "type_text", description: "Odaktaki alana yazar. Gönderme ve ödeme için sesli evet gerekir.", parameters: { type: "OBJECT", properties: { text: { type: "STRING" } }, required: ["text"] } },
   { name: "nav_key", description: "action: back, home veya recents.", parameters: { type: "OBJECT", properties: { action: { type: "STRING" } }, required: ["action"] } },
+  { name: "remember", description: "Kullanıcının cümlesini hafızaya yazar. Şifre ve kart saklanmaz.", parameters: { type: "OBJECT", properties: { text: { type: "STRING" } }, required: ["text"] } },
+  { name: "forget", description: "Hafızadan eşleşen cümleyi siler.", parameters: { type: "OBJECT", properties: { text: { type: "STRING" } }, required: ["text"] } },
+  { name: "add_reminder", description: "Hatırlatma kurar. Metinde gün ve saat olsun.", parameters: { type: "OBJECT", properties: { text: { type: "STRING" } }, required: ["text"] } },
 ];
 
 export function toolDeclarations() {
@@ -296,7 +315,7 @@ export function toolDeclarations() {
 }
 
 export function phoneToolPrompt() {
-  return `Bu Android telefonun köprüsü açık. Uygulama, YouTube, adres, arama, alarm, süre, fener, ses, parlaklık, ayar, medya, kamera, pil, bildirim, yol tarifi, paylaşım ve ekran araçlarını kullan. Birkaç adım gerekiyorsa araçları sırayla çağır. Arama, mesaj, WhatsApp, ödeme, silme ve gönderme için önce sor; kullanıcı evet demeden yapma. Yanıtın yine tek kısa cümle olsun.`;
+  return `Bu Android telefonun köprüsü açık. Uygulama, YouTube, adres, arama, alarm, süre, fener, ses, parlaklık, ayar, medya, kamera, pil, bildirim, yol tarifi, paylaşım, ekran, hatırla, unut ve hatırlatma araçlarını kullan. Birkaç adım gerekiyorsa araçları sırayla çağır. Arama, mesaj, WhatsApp, ödeme, silme ve gönderme için önce sor; kullanıcı evet demeden yapma. Şifre ve kart bilgisini saklama. Yanıtın yine tek kısa cümle olsun.`;
 }
 
 export const APK_URL = "https://github.com/hakan35trt-collab/ERO-AI/releases/latest/download/ERO.apk";
