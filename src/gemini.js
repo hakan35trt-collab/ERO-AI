@@ -66,6 +66,17 @@ export function textFromGenerate(data) {
   return parts.map((part) => part.text || "").join("").trim();
 }
 
+export function callsFromGenerate(data) {
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  return parts
+    .filter((part) => part.functionCall?.name)
+    .map((part) => ({
+      id: part.functionCall.id || "",
+      name: part.functionCall.name,
+      args: part.functionCall.args || {},
+    }));
+}
+
 export function audioFromGenerate(data) {
   const parts = data?.candidates?.[0]?.content?.parts || [];
   const audio = parts.find((part) => part.inlineData?.data && /audio|pcm|l16/i.test(part.inlineData.mimeType || "audio"));
@@ -74,7 +85,7 @@ export function audioFromGenerate(data) {
   return { pcm: base64ToPcm16(audio.inlineData.data), sampleRate: rate };
 }
 
-export async function streamGeminiText({ apiKey, model, contents, system, signal, onDelta, maxTokens = 160 }) {
+export async function streamGeminiText({ apiKey, model, contents, system, signal, onDelta, maxTokens = 160, tools }) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
     {
@@ -84,6 +95,7 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
         systemInstruction: { parts: [{ text: system || systemPrompt() }] },
         contents,
         generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
+        ...(tools ? { tools } : {}),
       }),
       signal,
     },
@@ -93,6 +105,7 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
   const decoder = new TextDecoder();
   let buf = "";
   let full = "";
+  let calls = [];
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -110,6 +123,8 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
       } catch {
         continue;
       }
+      const found = callsFromGenerate(json);
+      if (found.length) calls = found;
       const delta = textFromGenerate(json);
       if (!delta) continue;
       const addition = delta.startsWith(full) ? delta.slice(full.length) : delta;
@@ -117,11 +132,11 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
       if (addition) onDelta?.(addition);
     }
   }
-  if (!full.trim()) throw new Error("Boş yanıt");
-  return full.trim();
+  if (!full.trim() && !calls.length) throw new Error("Boş yanıt");
+  return { text: full.trim(), calls };
 }
 
-export async function geminiReply({ apiKey, contents, system, signal, onDelta, onStatus, maxTokens = 160 }) {
+export async function geminiReply({ apiKey, contents, system, signal, onDelta, onStatus, maxTokens = 160, tools }) {
   let last = null;
   for (const model of TEXT_MODELS) {
     if (signal?.aborted) throw new DOMException("iptal", "AbortError");
@@ -131,20 +146,21 @@ export async function geminiReply({ apiKey, contents, system, signal, onDelta, o
       onStatus?.("Düşünüyorum…");
     }, 420);
     try {
-      const text = await streamGeminiText({
+      const result = await streamGeminiText({
         apiKey,
         model,
         contents,
         system,
         signal,
         maxTokens,
+        tools,
         onDelta: (delta) => {
           clearTimeout(timer);
           onDelta?.(delta);
         },
       });
       clearTimeout(timer);
-      return { text, model };
+      return { text: result.text, calls: result.calls || [], model };
     } catch (error) {
       clearTimeout(timer);
       if (error?.name === "AbortError") throw error;
@@ -188,7 +204,7 @@ function parseLiveMessage(raw) {
   return null;
 }
 
-export function openLive({ apiKey, system, signal, onEvent }) {
+export function openLive({ apiKey, system, signal, onEvent, tools, onTool }) {
   const failures = [];
   const attempt = (model) =>
     new Promise((resolve, reject) => {
@@ -211,6 +227,7 @@ export function openLive({ apiKey, system, signal, onEvent }) {
               speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_VOICE } } },
             },
             systemInstruction: { parts: [{ text: system || systemPrompt() }] },
+            ...(tools ? { tools } : {}),
             realtimeInputConfig: {
               automaticActivityDetection: {
                 silenceDurationMs: 420,
@@ -230,6 +247,13 @@ export function openLive({ apiKey, system, signal, onEvent }) {
           return;
         }
         if (!data) return;
+        const calls = data.toolCall?.functionCalls;
+        if (calls?.length && opened) {
+          Promise.resolve(onTool?.(calls)).then((responses) => {
+            if (socket.readyState !== WebSocket.OPEN || !responses?.length) return;
+            socket.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+          }).catch(() => {});
+        }
         if (data.error) {
           fail(Object.assign(new Error(data.error.message || "Canlı oturum reddedildi"), { status: data.error.code, model }));
           socket.close();
@@ -255,6 +279,12 @@ export function openLive({ apiKey, system, signal, onEvent }) {
                   turns: [{ role: "user", parts: [{ text }] }],
                   turnComplete: true,
                 },
+              }));
+            },
+            sendToolResponse(responses) {
+              if (socket.readyState !== WebSocket.OPEN || !responses?.length) return;
+              socket.send(JSON.stringify({
+                toolResponse: { functionResponses: responses },
               }));
             },
             close() {

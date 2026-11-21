@@ -26,6 +26,36 @@ npm run preview
 
 iPhone’da Safari’nin Paylaş menüsünden **Ana Ekrana Ekle** kullanılır. Canlı mikrofon orada sınırlıdır; yazarak da konuşabilirsin.
 
+## Android APK
+
+Paket `com.ero.ai`, uygulama adı ERO. `android/` bir WebView kabuğudur; aynı arayüzü, sesi ve portreyi yükler. Önce paketin içindeki derlemeyi açar. `version.json` sayfadaki sürümden yeniyse [GitHub Pages](https://hakan35trt-collab.github.io/ERO-AI/) adresine geçer.
+
+İndirme: [ERO.apk](https://github.com/hakan35trt-collab/ERO-AI/releases/latest/download/ERO.apk). Ayarlar’daki **APK indir** de aynı adrese gider.
+
+Kurmak için APK’yı telefona al, dosyadan aç ve bilinmeyen uygulamalara izin ver. Play Store gerekmez. Yeni bir imza anahtarına geçilirse eski kurulum önce kaldırılır.
+
+`.github/workflows/android.yml` her `main` push’unda APK’yı derler ve `v1.0.<çalıştırma>` ile `latest` etiketli sürümlere `ERO.apk` olarak koyar. Yayın imzası için depoda şu sırlar durur:
+
+| Sır | Ne |
+| --- | --- |
+| `ERO_KEYSTORE_BASE64` | `keytool` ile üretilen `.jks` dosyasının base64 hali |
+| `ERO_KEYSTORE_PASSWORD` | Deponun parolası |
+| `ERO_KEY_ALIAS` | Anahtar takma adı, öneri `ero` |
+| `ERO_KEY_PASSWORD` | Anahtarın parolası |
+| `GEMINI_API_KEY` | Web derlemesiyle aynı anahtar |
+| `YOUTUBE_API_KEY` | İsteğe bağlı. Yoksa YouTube aramayı açar, ilk videoyu seçemez |
+
+Anahtar bir kez üretilir ve depoya yazılmaz:
+
+```bash
+keytool -genkeypair -keystore ero.jks -storepass 'PAROLA' -alias ero -keypass 'PAROLA' -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ERO, OU=ERO, O=ERO, L=Kocaeli, C=TR"
+base64 -w 0 ero.jks
+```
+
+Dört imza sırrı boşsa derleme hata vermez; geçici bir debug anahtarıyla imzalar ve APK’yı yine yayınlar. Günlükte parola veya anahtar değeri basılmaz.
+
+Açılışta GitHub’daki son sürüme bakılır. Daha yeniyse Türkçe bir soru çıkar, APK inder ve kurulum ekranı açılır.
+
 ## Güncelleme
 
 Kurulu uygulama yeni sürümü kendi alır. Hizmet çalışanı sayfa açılınca, sekme öne gelince ve yaklaşık her dakika denetler. Yeni dosyalar iner inmez bekleyen çalışan hemen devralır ve sayfa yenilenir. ERO o sırada konuşuyorsa cümle bitsin diye kısa bir süre bekler.
@@ -38,7 +68,7 @@ Her `main` push’u `.github/workflows/pages.yml` ile test eder, derler ve yayı
 
 ## Konuşma
 
-Bir kez **Konuşmayı başlat**’a dokun. ERO dinlemeye devam eder; her turda mikrofona yeniden basılmaz. Sustuğunda (yaklaşık 700 ms) sıra ona geçer. **Durdur** veya güç düğmesi dinlemeyi keser. Konuşurken mikrofon durur; sesin belirgin biçimde yüksekse sözünü keser. Canlı Gemini hattında sunucunun kendi ses etkinliği algısı ve kesme desteği kullanılır, mikrofon yankı engellemeyle açık kalır.
+Bir kez **Konuşmayı başlat**’a dokun. ERO dinlemeye devam eder; her turda mikrofona yeniden basılmaz. Sustuğunda (yaklaşık 420 ms) sıra ona geçer. **Durdur** veya güç düğmesi dinlemeyi keser. Konuşurken mikrofon durur; sesin belirgin biçimde yüksekse sözünü keser. Canlı Gemini hattında sunucunun kendi ses etkinliği algısı ve kesme desteği kullanılır, mikrofon yankı engellemeyle açık kalır.
 
 Ayarlardaki **Yalnızca “ERO” deyince uyan** kapalı başlar. Açılırsa yedek hatta cümle “ERO” ile başlamalıdır.
 

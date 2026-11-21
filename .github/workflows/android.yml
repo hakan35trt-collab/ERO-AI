@@ -1,0 +1,106 @@
+name: ERO Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ero-android
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Bağımlılıklar
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Web arayüz
+        env:
+          ERO_BASE: ./
+          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "$VITE_GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY secret is available to the build."
+          else
+            echo "GEMINI_API_KEY secret is empty. The first-run key screen stays."
+          fi
+          npm run build
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets/www
+          cp -a dist/. android/app/src/main/assets/www/
+
+      - name: İmza
+        env:
+          ERO_KEYSTORE_BASE64: ${{ secrets.ERO_KEYSTORE_BASE64 }}
+          ERO_KEYSTORE_PASSWORD: ${{ secrets.ERO_KEYSTORE_PASSWORD }}
+          ERO_KEY_ALIAS: ${{ secrets.ERO_KEY_ALIAS }}
+          ERO_KEY_PASSWORD: ${{ secrets.ERO_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ERO_KEYSTORE_BASE64" ] && [ -n "$ERO_KEYSTORE_PASSWORD" ] && [ -n "$ERO_KEY_ALIAS" ] && [ -n "$ERO_KEY_PASSWORD" ]; then
+            echo "Release keystore secrets are available."
+            printf '%s' "$ERO_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ero.keystore"
+          else
+            echo "Release keystore secrets are empty. Signing with a debug keystore so the build still produces an APK."
+            keytool -genkeypair -keystore "$RUNNER_TEMP/ero.keystore" -storepass android -alias erodebug -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ERO, OU=ERO, O=ERO, L=Kocaeli, C=TR"
+            ERO_KEYSTORE_PASSWORD=android
+            ERO_KEY_ALIAS=erodebug
+            ERO_KEY_PASSWORD=android
+          fi
+          {
+            echo "ERO_KEYSTORE_FILE=$RUNNER_TEMP/ero.keystore"
+            echo "ERO_KEYSTORE_PASSWORD=$ERO_KEYSTORE_PASSWORD"
+            echo "ERO_KEY_ALIAS=$ERO_KEY_ALIAS"
+            echo "ERO_KEY_PASSWORD=$ERO_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: APK
+        working-directory: android
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          if [ -n "$YOUTUBE_API_KEY" ]; then
+            echo "YOUTUBE_API_KEY secret is available."
+          else
+            echo "YOUTUBE_API_KEY secret is empty. YouTube opens search instead of the first video."
+          fi
+          VERSION="1.0.${{ github.run_number }}"
+          gradle :app:assembleRelease -PversionCode=${{ github.run_number }} -PversionName="$VERSION" --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/ERO.apk"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Yayın
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(printf 'version: %s\n\nERO telefon uygulaması. ERO.apk dosyasını indirip kur.\n' "$VERSION")
+          gh release create "v$VERSION" ERO.apk --title "ERO $VERSION" --notes "$NOTES" --latest
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest ERO.apk --title "ERO latest" --notes "$NOTES" --prerelease

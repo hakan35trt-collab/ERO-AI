@@ -9,6 +9,7 @@ import "@fontsource/jetbrains-mono/latin-ext-400.css";
 import "./styles.css";
 import { mount } from "./app.js";
 import { loadSettings, parseSetupKey, saveSettings } from "./memory.js";
+import { startAndroidShell } from "./onboard.js";
 
 const setupKey = parseSetupKey(location.hash);
 if (setupKey) {
@@ -22,6 +23,10 @@ const app = mount(document, {
   onSpeaking(value) {
     speaking.current = value;
   },
+});
+startAndroidShell(document, {
+  toast: app.toast,
+  ask: (text) => app.session.ask(text),
 });
 
 const params = new URLSearchParams(location.search);
@@ -39,7 +44,8 @@ if (splash) {
   }
 }
 
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+const androidShell = Boolean(window.EroNative?.call);
+if ("serviceWorker" in navigator && import.meta.env.PROD && !androidShell && location.protocol !== "file:") {
   let controlled = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!controlled) {

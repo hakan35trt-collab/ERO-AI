@@ -3,6 +3,7 @@ import { effectiveGeminiKey } from "./memory.js";
 import { GEMINI_VOICE, geminiReply, geminiSpeak, liveAudioParts, openLive, systemPrompt } from "./gemini.js";
 import { buildMessages, streamChat } from "./llm.js";
 import { parseHomeIntent, runHomeCommand } from "./smarthome.js";
+import { consumeConfirmation, noteUserText, onAndroid, phoneToolPrompt, runTool, toolDeclarations } from "./phone.js";
 import { detectDelivery, explicitMemories, extractWake, forSpeech, guessEmotion, needsResearch, takeSpeakable } from "./text.js";
 import { createVoice } from "./voice.js";
 
@@ -25,6 +26,91 @@ export function createConversation(deps) {
 
   function state(name) {
     deps.onState?.(name);
+  }
+
+  function voiceSystem(settings) {
+    const extra = settings?.wakeWord ? "\nKullanıcı ERO diye seslenmeden uzun yanıt verme." : "";
+    const phone = onAndroid() ? `\n${phoneToolPrompt()}` : "";
+    return `${systemPrompt()}${extra}${phone}`;
+  }
+
+  async function takeYes(text, { speak = true } = {}) {
+    noteUserText(text);
+    const result = await consumeConfirmation(text);
+    if (!result) return false;
+    const line = result.say || (result.cancelled ? "Tamam, vazgeçtim." : "Tamam.");
+    deps.onAssistant?.(line, { pending: false, emotion: result.ok ? "happy" : "" });
+    if (speak) {
+      if (live) live.sendText(`Tek kısa cümleyle söyle: ${line}`);
+      else await speakGemini(line);
+    }
+    return true;
+  }
+
+  async function answerToolRounds(contents, conversational) {
+    const token = turn;
+    const delivery = detectDelivery(conversational);
+    const tools = onAndroid() ? toolDeclarations() : undefined;
+    let acc = "";
+    let buf = "";
+    let speakChain = Promise.resolve();
+    const sayNow = (sentence) => {
+      const line = forSpeech(sentence);
+      if (!line) return;
+      speakChain = speakChain.then(() => {
+        if (token !== turn || !running) return undefined;
+        return speakGemini(line);
+      });
+    };
+    const pumpReady = (flush) => {
+      const taken = takeSpeakable(buf, { flush });
+      buf = taken.rest;
+      for (const sentence of taken.sentences) sayNow(sentence);
+    };
+    for (let step = 0; step < 4; step += 1) {
+      acc = "";
+      buf = "";
+      const reply = await geminiReply({
+        apiKey: geminiKey(),
+        contents,
+        system: voiceSystem(deps.getSettings()),
+        maxTokens: delivery === "chat" ? 160 : 640,
+        tools,
+        signal: signal(),
+        onStatus: (label) => deps.onStatus?.(label),
+        onDelta: (delta) => {
+          acc += delta;
+          buf += delta;
+          deps.onAssistant?.(acc, { pending: true });
+          pumpReady(false);
+        },
+      });
+      if (reply.calls?.length) {
+        const parts = [];
+        let asked = false;
+        for (const call of reply.calls) {
+          const result = await runTool(call.name, call.args || {});
+          parts.push({ functionResponse: { name: call.name, response: result } });
+          if (result.need_yes && result.say) {
+            asked = true;
+            deps.onAssistant?.(result.say, { pending: false });
+            await speakGemini(result.say);
+          }
+        }
+        if (asked || token !== turn) return;
+        contents.push({
+          role: "model",
+          parts: reply.calls.map((call) => ({ functionCall: { name: call.name, args: call.args || {} } })),
+        });
+        contents.push({ role: "user", parts });
+        continue;
+      }
+      if (!acc) acc = reply.text;
+      pumpReady(true);
+      deps.onAssistant?.(acc, { pending: false, via: reply.model, emotion: guessEmotion(acc) });
+      await speakChain;
+      return;
+    }
   }
 
   function geminiKey() {
@@ -125,7 +211,7 @@ export function createConversation(deps) {
       notes = await deps.research(conversational);
       if (notes) deps.onResearch?.(notes);
     }
-    if (token !== turn || !running) return;
+    if (token !== turn) return;
     const history = deps.getHistory();
     const memories = await deps.getMemories();
     state("think");
@@ -136,46 +222,12 @@ export function createConversation(deps) {
       for (const item of history.filter((entry) => entry.role === "user" || entry.role === "assistant").slice(-12)) {
         contents.push({ role: item.role === "assistant" ? "model" : "user", parts: [{ text: String(item.text || "").slice(0, 1500) }] });
       }
-      let acc = "";
-      let buf = "";
-      let speakChain = Promise.resolve();
-      const sayNow = (sentence) => {
-        const line = forSpeech(sentence);
-        if (!line) return;
-        speakChain = speakChain.then(() => {
-          if (token !== turn || !running) return undefined;
-          return speakGemini(line);
-        });
-      };
-      const pumpReady = (flush) => {
-        const taken = takeSpeakable(buf, { flush });
-        buf = taken.rest;
-        for (const sentence of taken.sentences) sayNow(sentence);
-      };
-      const delivery = detectDelivery(conversational);
       try {
-        const reply = await geminiReply({
-          apiKey: geminiKey(),
-          contents,
-          system: systemPrompt(),
-          maxTokens: delivery === "chat" ? 160 : 640,
-          signal: signal(),
-          onStatus: (label) => deps.onStatus?.(label),
-          onDelta: (delta) => {
-            acc += delta;
-            buf += delta;
-            deps.onAssistant?.(acc, { pending: true });
-            pumpReady(false);
-          },
-        });
-        if (!acc) acc = reply.text;
-        pumpReady(true);
-        deps.onAssistant?.(acc, { pending: false, via: reply.model, emotion: guessEmotion(acc) });
+        await answerToolRounds(contents, conversational);
       } catch (error) {
         if (error?.name === "AbortError" || token !== turn) return;
-        if (!acc.trim()) await keylessAnswer(conversational, notes, token);
+        await keylessAnswer(conversational, notes, token);
       }
-      await speakChain;
     } else {
       await keylessAnswer(conversational, notes, token);
     }
@@ -238,6 +290,7 @@ export function createConversation(deps) {
     if (!spoken && recorded.length < 2) return;
     if (spoken) {
       deps.onUser?.(spoken);
+      if (await takeYes(spoken)) return;
       await answerText(spoken);
       return;
     }
@@ -320,13 +373,16 @@ export function createConversation(deps) {
     if (heardText) {
       if (!liveHeard || heardText.startsWith(liveHeard)) liveHeard = heardText;
       else if (!liveHeard.startsWith(heardText)) liveHeard += heardText;
+      noteUserText(liveHeard);
       deps.onUser?.(liveHeard, { partial: true });
     }
     if (content.turnComplete && liveHeard) {
-      const intent = parseHomeIntent(liveHeard);
-      if (intent.matched) deps.onHome?.(intent);
-      deps.onUser?.(liveHeard, { partial: false });
+      const said = liveHeard;
       liveHeard = "";
+      const intent = parseHomeIntent(said);
+      if (intent.matched) deps.onHome?.(intent);
+      deps.onUser?.(said, { partial: false });
+      takeYes(said, { speak: false });
     }
     const said = content.outputTranscription?.text;
     if (said) {
@@ -363,9 +419,19 @@ export function createConversation(deps) {
       try {
         live = await openLive({
           apiKey: geminiKey(),
-          system: `${systemPrompt()}${settings.wakeWord ? "\nKullanıcı ERO diye seslenmeden uzun yanıt verme." : ""}`,
+          system: voiceSystem(settings),
+          tools: onAndroid() ? toolDeclarations() : undefined,
           signal: abort.signal,
           onEvent: handleLive,
+          onTool: async (calls) => {
+            const responses = [];
+            for (const call of calls) {
+              const result = await runTool(call.name, call.args || {});
+              if (result.need_yes && result.say) deps.onAssistant?.(result.say, { pending: false });
+              responses.push({ id: call.id || "", name: call.name, response: result });
+            }
+            return responses;
+          },
         });
         deps.onStatus?.(`Canlı konuşma açık · ${live.model} · ${GEMINI_VOICE}`);
       } catch {
@@ -408,6 +474,7 @@ export function createConversation(deps) {
       return false;
     }
     state("listen");
+    try { globalThis.EroNative?.call?.("pauseListening", "{}"); } catch { /* tarayıcı */ }
     return true;
   }
 
@@ -428,6 +495,7 @@ export function createConversation(deps) {
     voiced = false;
     chunks = [];
     state("idle");
+    try { globalThis.EroNative?.call?.("resumeListening", "{}"); } catch { /* tarayıcı */ }
   }
 
   return {
@@ -436,14 +504,18 @@ export function createConversation(deps) {
     ask: (text) => {
       const clean = String(text || "").trim();
       if (!clean) return null;
+      noteUserText(clean);
       deps.onUser?.(clean, { partial: false });
-      if (live) {
-        live.sendText(clean);
-        const intent = parseHomeIntent(clean);
-        if (intent.matched) deps.onHome?.(intent);
-        return null;
-      }
-      return answerText(clean);
+      return (async () => {
+        if (await takeYes(clean)) return null;
+        if (live) {
+          live.sendText(clean);
+          const intent = parseHomeIntent(clean);
+          if (intent.matched) deps.onHome?.(intent);
+          return null;
+        }
+        return answerText(clean);
+      })();
     },
     active: () => running,
     setMuted(value) {

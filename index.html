@@ -160,12 +160,28 @@
         <input id="set-ha" placeholder="http://192.168.1.20:8123" />
         <label for="set-token">Jeton</label>
         <input id="set-token" type="password" autocomplete="off" />
+        <label id="listen-row" class="check" hidden><input id="set-listen" type="checkbox" /> Ekran kilitliyken “ERO” deyince uyan</label>
         <div class="row">
           <button type="submit">Kaydet</button>
           <button id="ha-test" type="button">Bağlantıyı dene</button>
           <button id="clear-chat" type="button">Sohbeti sil</button>
         </div>
+        <p class="hint">Telefona kurulan ERO, konuşarak uygulamaları açar. APK’yı buradan indirirsin.</p>
+        <a id="apk-link" href="https://github.com/hakan35trt-collab/ERO-AI/releases/latest/download/ERO.apk">APK indir</a>
+        <button id="apk-check" type="button" hidden>Güncellemeyi denetle</button>
       </form>
+    </section>
+
+    <section id="onboard" class="gate" hidden>
+      <div class="gate-card">
+        <p class="gate-kicker" id="onboard-kicker">Telefon</p>
+        <h1 id="onboard-title">ERO telefonunu senin sözünle kullanır.</h1>
+        <p id="onboard-body">Her izni ayrı ayrı sorarım. İstemediğini geçebilirsin. Arama, mesaj, ödeme ve silme için her seferinde sesli evet isterim.</p>
+        <div class="row">
+          <button id="onboard-allow" type="button">İzin ver</button>
+          <button id="onboard-next" type="button" class="ghost">Geç</button>
+        </div>
+      </div>
     </section>
 
     <div id="toasts"></div>

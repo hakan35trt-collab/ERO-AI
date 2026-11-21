@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ERO</string>
+    <string name="accessibility_desc">ERO, sen söyleyince ekrandaki yazıyı okur, düğmeye basar, kaydırır ve yazar. Ödeme, silme ve mesaj gönderme için sesli evet ister. Bunu istediğin zaman Ayarlar’dan kapatabilirsin.</string>
+    <string name="listening">ERO dinliyor</string>
+    <string name="listening_sub">“ERO” de. Durdurmak için “ERO dur”.</string>
+    <string name="stop">Durdur</string>
+</resources>
