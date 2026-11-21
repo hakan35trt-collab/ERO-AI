@@ -41,7 +41,8 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
     location.reload();
   });
 
-  navigator.serviceWorker.register("./sw.js").then((registration) => {
+  const base = import.meta.env.BASE_URL || "./";
+  navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).then((registration) => {
     const ready = () => {
       if (registration.waiting && navigator.serviceWorker.controller) offer(registration);
     };

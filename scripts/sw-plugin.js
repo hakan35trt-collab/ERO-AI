@@ -81,13 +81,38 @@ self.addEventListener("fetch", (event) => {
 `;
 }
 
-export function eroServiceWorker() {
+function rewriteIndex(dist, base) {
+  const file = path.join(dist, "index.html");
+  if (!fs.existsSync(file) || !base.startsWith("/")) return;
+  const prefix = base.endsWith("/") ? base : `${base}/`;
+  const html = fs.readFileSync(file, "utf8").replace(/(href|src)="\.\/([^"]*)"/g, `$1="${prefix}$2"`);
+  fs.writeFileSync(file, html);
+}
+
+function rewriteManifest(dist, base) {
+  const file = path.join(dist, "manifest.webmanifest");
+  if (!fs.existsSync(file) || !base.startsWith("/")) return;
+  const prefix = base.endsWith("/") ? base : `${base}/`;
+  const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+  manifest.id = prefix;
+  manifest.start_url = prefix;
+  manifest.scope = prefix;
+  manifest.icons = (manifest.icons || []).map((icon) => {
+    const src = String(icon.src || "").replace(/^\.\//, "");
+    return { ...icon, src: src.startsWith("/") ? src : `${prefix}${src}` };
+  });
+  fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+export function eroServiceWorker(base = "/ERO-AI/") {
   return {
     name: "ero-service-worker",
     apply: "build",
     closeBundle() {
       const dist = path.resolve("dist");
       if (!fs.existsSync(dist)) return;
+      rewriteManifest(dist, base);
+      rewriteIndex(dist, base);
       const files = [];
       walk(dist, "", files);
       const version = new Date().toISOString();

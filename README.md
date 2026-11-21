@@ -34,12 +34,11 @@ Kurulu uygulama yeni sürümü kendi alır. Hizmet çalışanı sayfa açılınc
 
 ## GitHub’a taşıyıp Pages’te yayınlama
 
-Kaynak, `main` dalına her push’ta GitHub Pages’e çıkacak biçimde hazır. Depoyu GitHub’a aldıktan sonra:
+Canlı adres: [https://hakan35trt-collab.github.io/ERO-AI/](https://hakan35trt-collab.github.io/ERO-AI/)
 
-1. GitHub’da yeni bir depo oluştur ve bu projeyi `main` dalına push et.
-2. Depoda **Settings → Pages → Build and deployment → Source: GitHub Actions** seç.
-3. `.github/workflows/pages.yml` derler, testleri çalıştırır ve `dist` klasörünü yayınlar.
-4. Adres `https://<kullanıcı>.github.io/<depo>/` olur. Köprüler görelidir; hem proje sitesinde hem kullanıcı sitesinde çalışır.
+Kaynak `hakan35trt-collab/ERO-AI` deposunun `main` dalındadır. Her push `.github/workflows/pages.yml` ile test eder, derler ve GitHub Pages’e çıkar. Üretim derlemesinin kökü `/ERO-AI/`dir: Vite `base`, bildirim dosyasının `start_url` ve `scope` değerleri, hizmet çalışanının kapsamı ve ikon yolları bu alt yola göredir. Depo adı değişirse `vite.config.js` içindeki `pagesBase` aynı adla güncellenmelidir.
+
+Pages kaynağı **Settings → Pages → Build and deployment → Source: GitHub Actions** olmalıdır. İlk yayında bu seçili değilse oradan seç.
 
 İlk yayın bir iki dakika sürebilir. Sonraki `main` push’ları aynı akışla kendiliğinden güncellenir. Kurulu telefon uygulaması bir sonraki açılışta yeni sürümü indirir.
 
