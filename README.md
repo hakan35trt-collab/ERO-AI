@@ -28,7 +28,7 @@ iPhone’da Safari’nin Paylaş menüsünden **Ana Ekrana Ekle** kullanılır. 
 
 ## Android APK
 
-Paket `com.ero.ai`, uygulama adı ERO. `android/` bir WebView kabuğudur; aynı arayüzü, sesi ve portreyi yükler. Önce paketin içindeki derlemeyi açar. `version.json` sayfadaki sürümden yeniyse [GitHub Pages](https://hakan35trt-collab.github.io/ERO-AI/) adresine geçer.
+Paket `com.ero.ai`, uygulama adı ERO. `android/` Jetpack Compose kabuğudur. Ortada mevcut portre bir WebView’de durur. Anahtar ekranı yoktur; `GEMINI_API_KEY` derlemeye gömülür. Model sessizce değişir, kullanıcıya teknik hata gösterilmez. Ses ekranında hassasiyet, cihaz destekliyorsa gürültü bastırma ve deneysel ses izi vardır. Önce paketin içindeki derlemeyi açar. `version.json` sayfadaki sürümden yeniyse [GitHub Pages](https://hakan35trt-collab.github.io/ERO-AI/) adresine geçer.
 
 İndirme: [ERO.apk](https://github.com/hakan35trt-collab/ERO-AI/releases/latest/download/ERO.apk). Ayarlar’daki **APK indir** de aynı adrese gider.
 

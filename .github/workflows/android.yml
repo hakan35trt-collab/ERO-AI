@@ -45,7 +45,7 @@ jobs:
           if [ -n "$VITE_GEMINI_API_KEY" ]; then
             echo "GEMINI_API_KEY secret is available to the build."
           else
-            echo "GEMINI_API_KEY secret is empty. The first-run key screen stays."
+            echo "GEMINI_API_KEY secret is empty. ERO bu derlemede cevap üretemez."
           fi
           npm run build
           rm -rf android/app/src/main/assets/www
@@ -85,7 +85,13 @@ jobs:
         working-directory: android
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY secret is available to the build."
+          else
+            echo "GEMINI_API_KEY secret is empty. ERO bu derlemede cevap üretemez."
+          fi
           if [ -n "$YOUTUBE_API_KEY" ]; then
             echo "YOUTUBE_API_KEY secret is available."
           else

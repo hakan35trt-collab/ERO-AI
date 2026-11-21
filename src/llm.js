@@ -272,7 +272,7 @@ export async function streamChat({ messages, settings = {}, onDelta, signal, onS
       lastError = error;
       const quota = error?.status === 402 || error?.status === 429;
       if (quota) {
-        onStatus?.("Ücretsiz hat dolu, başka yoldan deniyorum…");
+        onStatus?.("Bir saniye, başka yoldan deniyorum.");
         if (Number(error.retryAfter || 0) > 15) skippedHosts.add(host);
         else {
           try {

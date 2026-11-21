@@ -14,6 +14,11 @@
     <link rel="icon" href="./ero-mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      if (new URLSearchParams(location.search).get("shell") === "1") {
+        document.documentElement.dataset.shell = "1";
+      }
+    </script>
   </head>
   <body>
     <div id="splash" role="dialog" aria-label="ERO açılıyor">

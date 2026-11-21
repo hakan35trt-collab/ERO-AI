@@ -433,10 +433,10 @@ export function createConversation(deps) {
             return responses;
           },
         });
-        deps.onStatus?.(`Canlı konuşma açık · ${live.model} · ${GEMINI_VOICE}`);
+        deps.onStatus?.("Dinliyorum.");
       } catch {
         live = null;
-        deps.onStatus?.("Canlı ses açılamadı. Cümle bitince Gemini yanıtlayacak.");
+        deps.onStatus?.("Canlı hat yok. Cümle bitince cevaplarım.");
       }
     }
     if (!live && !geminiKey()) {

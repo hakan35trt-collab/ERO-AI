@@ -17,13 +17,20 @@ android {
         versionCode = versionCodeProp
         versionName = versionNameProp
         val youtube = (System.getenv("YOUTUBE_API_KEY") ?: "").filter { it.isLetterOrDigit() || it == '-' || it == '_' }
+        val gemini = (System.getenv("GEMINI_API_KEY") ?: "").filter { it.isLetterOrDigit() || it == '-' || it == '_' }
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtube\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"$gemini\"")
         buildConfigField("String", "PAGES_URL", "\"https://hakan35trt-collab.github.io/ERO-AI/\"")
         buildConfigField("String", "RELEASES_URL", "\"https://api.github.com/repos/hakan35trt-collab/ERO-AI/releases/latest\"")
     }
 
     buildFeatures {
         buildConfig = true
+        compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.15"
     }
 
     compileOptions {
@@ -64,5 +71,12 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+    implementation("androidx.activity:activity-compose:1.9.1")
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

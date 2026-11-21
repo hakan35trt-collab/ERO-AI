@@ -51,7 +51,7 @@ export function mount(doc, hooks = {}) {
       notes = text;
     },
     onState: paintState,
-    onStatus: (text) => toast(text),
+    onStatus: (text) => toast(plainStatus(text)),
     onLevel: (rms) => {
       avatar.setLevel(rms);
       doc.documentElement.style.setProperty("--level", String(Math.min(1, rms * 4)));
@@ -81,6 +81,15 @@ export function mount(doc, hooks = {}) {
       voice.speak(text, style);
     },
   });
+
+  function plainStatus(text) {
+    const raw = String(text || "");
+    if (doc.documentElement.dataset.shell !== "1") return raw;
+    if (/mikrofon izni/i.test(raw)) return "Mikrofon izni olmadan konuşamam.";
+    if (/duyamad/i.test(raw)) return "Seni duyamadım. Tekrar söyler misin?";
+    if (/http|websocket|model|gemini|503|429|api key|exception/i.test(raw)) return "Bir saniye.";
+    return raw;
+  }
 
   function toast(text) {
     if (!text) return;
@@ -291,8 +300,9 @@ export function mount(doc, hooks = {}) {
   }
 
   function showGate() {
+    const shell = doc.documentElement.dataset.shell === "1";
     const hasKey = Boolean(effectiveGeminiKey(settings));
-    doc.querySelector("#gate").hidden = hasKey || settings.geminiSkipped;
+    doc.querySelector("#gate").hidden = shell || hasKey || settings.geminiSkipped;
     const note = doc.querySelector("#gemini-note");
     if (note) {
       note.textContent = settings.geminiKey

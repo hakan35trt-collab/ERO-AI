@@ -112,11 +112,15 @@ class EroListenService : Service() {
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
             })
         }
+        val sensitivity = VoicePrefs.sensitivity(this)
+        val silence = (1100 - sensitivity * 700).toLong().coerceIn(350, 1100)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence / 2)
         }
         try {
             recognizer?.startListening(intent)
