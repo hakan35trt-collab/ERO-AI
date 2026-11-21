@@ -2,8 +2,15 @@ import { base64ToPcm16, pcm16ToBase64 } from "./audio.js";
 
 export const GEMINI_VOICE = "Charon";
 export const LIVE_MODELS = ["gemini-omni-flash-preview", "gemini-omni-1.2-flash"];
-export const TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
+export const TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.7-flash", "gemini-3.5-flash"];
 export const TTS_MODELS = ["gemini-2.5-flash-preview-tts"];
+export const LITE_TOKEN_MS = 5000;
+export const FALLBACK_TOKEN_MS = 2500;
+export const TOTAL_BUDGET_MS = 12000;
+
+export function tokenBudget(model) {
+  return model === TEXT_MODELS[0] ? LITE_TOKEN_MS : FALLBACK_TOKEN_MS;
+}
 
 const LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
@@ -85,7 +92,33 @@ export function audioFromGenerate(data) {
   return { pcm: base64ToPcm16(audio.inlineData.data), sampleRate: rate };
 }
 
-export async function streamGeminiText({ apiKey, model, contents, system, signal, onDelta, maxTokens = 160, tools }) {
+export function takeSseEvents(buffer, flush = false) {
+  const normalized = String(buffer || "").replace(/\r\n/g, "\n");
+  const chunks = normalized.split(/\n\n/);
+  const rest = flush ? "" : chunks.pop() || "";
+  const events = [];
+  const pending = flush ? chunks : chunks;
+  for (const chunk of pending) {
+    const line = chunk.split(/\n/).find((item) => item.trim().startsWith("data:"));
+    if (!line) continue;
+    const payload = line.trim().slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    try {
+      events.push(JSON.parse(payload));
+    } catch {
+      /* eksik parça sonraki okumada tamamlanır */
+    }
+  }
+  return { rest, events };
+}
+
+function generationConfig(maxTokens, thinking) {
+  const config = { temperature: 0.85, maxOutputTokens: maxTokens };
+  if (thinking) config.thinkingConfig = { thinkingLevel: "minimal" };
+  return config;
+}
+
+export async function streamGeminiText({ apiKey, model, contents, system, signal, onDelta, maxTokens = 160, tools, thinking = true }) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
     {
@@ -94,7 +127,7 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system || systemPrompt() }] },
         contents,
-        generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
+        generationConfig: generationConfig(maxTokens, thinking),
         ...(tools ? { tools } : {}),
       }),
       signal,
@@ -106,23 +139,10 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
   let buf = "";
   let full = "";
   let calls = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const chunks = buf.split(/\n\n/);
-    buf = chunks.pop() || "";
-    for (const chunk of chunks) {
-      const line = chunk.split(/\n/).find((item) => item.startsWith("data:"));
-      if (!line) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      let json;
-      try {
-        json = JSON.parse(payload);
-      } catch {
-        continue;
-      }
+  const consume = (flush) => {
+    const parsed = takeSseEvents(buf, flush);
+    buf = parsed.rest;
+    for (const json of parsed.events) {
       const found = callsFromGenerate(json);
       if (found.length) calls = found;
       const delta = textFromGenerate(json);
@@ -131,44 +151,109 @@ export async function streamGeminiText({ apiKey, model, contents, system, signal
       full = delta.startsWith(full) ? delta : full + delta;
       if (addition) onDelta?.(addition);
     }
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    consume(false);
   }
+  consume(true);
   if (!full.trim() && !calls.length) throw new Error("Boş yanıt");
   return { text: full.trim(), calls };
 }
 
-export async function geminiReply({ apiKey, contents, system, signal, onDelta, onStatus, maxTokens = 160, tools }) {
+export async function geminiReply({ apiKey, contents, system, signal, onDelta, maxTokens = 160, tools }) {
+  const started = Date.now();
+  const budget = new AbortController();
+  const kill = setTimeout(() => budget.abort(), TOTAL_BUDGET_MS);
+  const onParent = () => budget.abort();
+  signal?.addEventListener("abort", onParent, { once: true });
   let last = null;
-  for (const model of TEXT_MODELS) {
-    if (signal?.aborted) throw new DOMException("iptal", "AbortError");
-    let announced = false;
-    const timer = setTimeout(() => {
-      announced = true;
-      onStatus?.("Düşünüyorum…");
-    }, 420);
-    try {
-      const result = await streamGeminiText({
+  try {
+    for (const model of TEXT_MODELS) {
+      if (budget.signal.aborted || signal?.aborted) break;
+      const limit = Math.min(tokenBudget(model), TOTAL_BUDGET_MS - (Date.now() - started));
+      if (limit < 400) break;
+      const attempt = await runModel({
         apiKey,
         model,
         contents,
         system,
-        signal,
         maxTokens,
         tools,
-        onDelta: (delta) => {
-          clearTimeout(timer);
-          onDelta?.(delta);
-        },
+        onDelta,
+        parent: budget.signal,
+        limit,
       });
-      clearTimeout(timer);
-      return { text: result.text, calls: result.calls || [], model };
-    } catch (error) {
-      clearTimeout(timer);
-      if (error?.name === "AbortError") throw error;
-      last = error;
-      if (announced && (error.status === 503 || error.status === 429)) onStatus?.("Bu model meşgul, diğerine geçiyorum…");
+      if (attempt.ok) return { text: attempt.text, calls: attempt.calls || [], model };
+      last = attempt.error;
+      if (signal?.aborted) throw new DOMException("iptal", "AbortError");
+      if (last?.status === 429 || last?.status === 503) {
+        await sleep(280, budget.signal).catch((error) => {
+          if (error?.name === "AbortError") return;
+          throw error;
+        });
+      }
     }
+  } finally {
+    clearTimeout(kill);
+    signal?.removeEventListener("abort", onParent);
   }
-  throw last || new Error("Gemini yanıt vermedi");
+  if (signal?.aborted) throw new DOMException("iptal", "AbortError");
+  throw last || new DOMException("süre", "AbortError");
+}
+
+async function runModel({ apiKey, model, contents, system, maxTokens, tools, onDelta, parent, limit }) {
+  const attempt = new AbortController();
+  const stop = () => attempt.abort();
+  parent.addEventListener("abort", stop, { once: true });
+  let saw = false;
+  const timer = setTimeout(() => {
+    if (!saw) attempt.abort();
+  }, limit);
+  const forward = (delta) => {
+    saw = true;
+    clearTimeout(timer);
+    onDelta?.(delta);
+  };
+  try {
+    const result = await streamGeminiText({
+      apiKey,
+      model,
+      contents,
+      system,
+      signal: attempt.signal,
+      maxTokens,
+      tools,
+      thinking: true,
+      onDelta: forward,
+    });
+    return { ok: true, text: result.text, calls: result.calls || [] };
+  } catch (error) {
+    if (error?.status === 400 && !parent.aborted) {
+      try {
+        const result = await streamGeminiText({
+          apiKey,
+          model,
+          contents,
+          system,
+          signal: attempt.signal,
+          maxTokens,
+          tools,
+          thinking: false,
+          onDelta: forward,
+        });
+        return { ok: true, text: result.text, calls: result.calls || [] };
+      } catch (again) {
+        return { ok: false, error: again };
+      }
+    }
+    return { ok: false, error };
+  } finally {
+    clearTimeout(timer);
+    parent.removeEventListener("abort", stop);
+  }
 }
 
 export async function geminiSpeak({ apiKey, text, signal, voice = GEMINI_VOICE }) {
@@ -179,7 +264,7 @@ export async function geminiSpeak({ apiKey, text, signal, voice = GEMINI_VOICE }
         apiKey,
         model,
         signal,
-        tries: 2,
+        tries: 1,
         body: {
           contents: [{ role: "user", parts: [{ text }] }],
           generationConfig: {

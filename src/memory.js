@@ -1,6 +1,7 @@
 export const DEFAULT_SETTINGS = {
   handsFree: false,
-  rate: 1.02,
+  rate: 1.05,
+  liveVoice: false,
   pitch: 1.03,
   voiceURI: "",
   customBase: "",

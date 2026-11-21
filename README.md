@@ -1,6 +1,6 @@
 # ERO
 
-ERO, Türkçe konuşan kişisel bir sesli asistan. Telefonda eller serbest sohbet eder; ortadaki portre konuşurken ağız ve gözleriyle eşlik eder. Ana ekrana kurulabilen bir PWA’dır.
+ERO, Türkçe konuşan kişisel bir sesli asistan. Telefonda eller serbest sohbet eder. Ortada neon bir ses dalgası bekler, dinler, düşünür ve konuşur. Portre dosyaları depoda durur ama sayfa onları yüklemez. Ana ekrana kurulabilen bir PWA’dır.
 
 ## Yerelde çalıştırma
 
@@ -83,7 +83,7 @@ Anahtar [Google AI Studio](https://aistudio.google.com/apikey) üzerinden alın�
 
 ## Portre
 
-Yüz, `public/avatar/base.jpg` üzerine gerilmiş bir 2.5D kafestir. `scripts/generate-rig.py` MediaPipe Face Landmarker ile 478 noktayı ve üçgenleri `public/avatar/rig.json` dosyasına yazar. Saç, boyun, ceket ve kenar için ek düğümler vardır; ceket ve ERO yazısı oynamaz. Tarayıcı bu ağı WebGL ile her karede yay gibi yumuşatarak eğer. Çene açılınca ağız boşluğu ve `viseme-a` / `viseme-i` diş şeridi görünür. Göz bebeği bakışla kayar, göz kapağı üstünü örter. Eski kareler WebGL açılmazsa yedek olarak durur. Çözünürlük en fazla 2 katına çıkar.
+Açık sayfa yüzü yüklemez; ortadaki tuval ses dalgasıdır. Yüz dosyaları durur: `public/avatar/base.jpg` üzerine gerilmiş bir 2.5D kafestir. `scripts/generate-rig.py` MediaPipe Face Landmarker ile 478 noktayı ve üçgenleri `public/avatar/rig.json` dosyasına yazar. Saç, boyun, ceket ve kenar için ek düğümler vardır; ceket ve ERO yazısı oynamaz. Tarayıcı bu ağı WebGL ile her karede yay gibi yumuşatarak eğer. Çene açılınca ağız boşluğu ve `viseme-a` / `viseme-i` diş şeridi görünür. Göz bebeği bakışla kayar, göz kapağı üstünü örter. Eski kareler WebGL açılmazsa yedek olarak durur. Çözünürlük en fazla 2 katına çıkar.
 
 Duygu etiketleri `[mutlu]` `[üzgün]` `[şaşkın]` `[korkmuş]` `[kızgın]` `[düşünceli]` `[sakin]` `[utangaç]` yaklaşık yarım saniyede karışır ve konuşmanın üstüne biner. Boşta nefes, küçük baş salınımı, bakış sıçraması ve kırpma vardır. Dinlerken baş sallanır ve kaşlar kalkar. Düşünürken bakış yukarı ve yana kayar.
 

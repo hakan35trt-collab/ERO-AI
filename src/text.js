@@ -330,7 +330,7 @@ export function rankScore(voice) {
   if (lang.startsWith("tr")) score += 100;
   if (lang === "tr-tr") score += 20;
   if (/natural|neural|premium|enhanced|wavenet/.test(name)) score += 25;
-  if (name.includes("google") && lang.startsWith("tr")) score += 10;
+  if (name.includes("google") && lang.startsWith("tr")) score += 50;
   return score;
 }
 

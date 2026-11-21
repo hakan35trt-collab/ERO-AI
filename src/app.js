@@ -1,4 +1,4 @@
-import { createAvatar } from "./avatar.js";
+import { createWave } from "./wave.js";
 import { createConversation } from "./session.js";
 import { bundledGeminiKey, createStore, effectiveGeminiKey, loadSettings, saveSettings } from "./memory.js";
 import { KOCAELI, localForecast, research, sourceLabels } from "./search.js";
@@ -31,14 +31,18 @@ export function mount(doc, hooks = {}) {
   let mood = "";
   let riddle = 0;
   let soundOn = true;
-  const avatar = createAvatar(doc.querySelector("#avatar"));
+  const avatar = createWave(doc.querySelector("#avatar"));
   const voice = createVoice({
     getSettings: () => settings,
     onViseme: (shape) => avatar.setViseme(shape),
-    onSpeakStart: () => hooks.onSpeaking?.(true),
+    onSpeakStart: () => {
+      hooks.onSpeaking?.(true);
+      paintState("speak");
+    },
     onSpeakEnd: () => {
       avatar.setUtterance("");
       hooks.onSpeaking?.(false);
+      session.settled();
     },
   });
 
@@ -80,15 +84,30 @@ export function mount(doc, hooks = {}) {
       if (!soundOn) return;
       voice.speak(text, style);
     },
+    stopSpeaking: () => voice.stopSpeaking(),
+    isSpeaking: () => voice.isSpeaking(),
+    lastSpoken: () => voice.lastSpoken(),
   });
 
   function plainStatus(text) {
     const raw = String(text || "");
-    if (doc.documentElement.dataset.shell !== "1") return raw;
     if (/mikrofon izni/i.test(raw)) return "Mikrofon izni olmadan konuşamam.";
-    if (/duyamad/i.test(raw)) return "Seni duyamadım. Tekrar söyler misin?";
-    if (/http|websocket|model|gemini|503|429|api key|exception/i.test(raw)) return "Bir saniye.";
+    if (/duyamad|yetişemed|yazarak/i.test(raw)) return raw;
+    if (/http|websocket|model|gemini|503|429|api|exception|abort/i.test(raw)) return "Bağlantı koptu. Yeniden bağlan.";
     return raw;
+  }
+
+  let faultAt = 0;
+  function noteFault(message) {
+    const now = Date.now();
+    if (now - faultAt < 4000) return;
+    faultAt = now;
+    const line = message || "Bağlantı koptu. Yeniden bağlan.";
+    const status = doc.querySelector("#link-status");
+    if (status) status.textContent = line;
+    const button = doc.querySelector("#reconnect");
+    if (button) button.hidden = false;
+    toast(line);
   }
 
   function toast(text) {
@@ -350,7 +369,12 @@ export function mount(doc, hooks = {}) {
       paintState("idle");
       return;
     }
-    const ok = await session.start();
+    let ok = false;
+    try {
+      ok = await session.start();
+    } catch {
+      noteFault("Mikrofon açılamadı. Yazarak konuşabilirsin.");
+    }
     if (!ok) paintState("idle");
   });
   doc.querySelector("#btn-key").addEventListener("click", () => {
@@ -372,7 +396,7 @@ export function mount(doc, hooks = {}) {
     if (!text) return;
     input.value = "";
     voice.unlock();
-    session.ask(text);
+    Promise.resolve(session.ask(text)).catch(() => noteFault("Bir şey takıldı. Yeniden bağlan."));
   });
   doc.querySelector("#memory-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -390,6 +414,7 @@ export function mount(doc, hooks = {}) {
       geminiKey: doc.querySelector("#set-gemini").value.trim(),
       geminiSkipped: !doc.querySelector("#set-gemini").value.trim() && settings.geminiSkipped,
       wakeWord: doc.querySelector("#set-wake").checked,
+      liveVoice: doc.querySelector("#set-live").checked,
       homeEnabled: doc.querySelector("#set-home").checked,
       homeDemo: true,
       haUrl: doc.querySelector("#set-ha").value.trim(),
@@ -468,11 +493,22 @@ export function mount(doc, hooks = {}) {
 
   doc.querySelector("#set-gemini").value = settings.geminiKey || "";
   doc.querySelector("#set-wake").checked = Boolean(settings.wakeWord);
+  doc.querySelector("#set-live").checked = Boolean(settings.liveVoice);
   doc.querySelector("#set-home").checked = Boolean(settings.homeEnabled);
   doc.querySelector("#set-ha").value = settings.haUrl || "";
   doc.querySelector("#set-token").value = settings.haToken || "";
   doc.querySelector("#build-line").textContent = `Sürüm ${__ERO_BUILD__}`;
   showGate();
+  doc.querySelector("#reconnect")?.addEventListener("click", async () => {
+    const button = doc.querySelector("#reconnect");
+    if (button) button.hidden = true;
+    const status = doc.querySelector("#link-status");
+    if (status) status.textContent = "Yeniden bağlanıyor";
+    session.stop();
+    voice.stopSpeaking();
+    const ok = await session.start();
+    if (!ok) paintState("idle");
+  });
   if (new URLSearchParams(location.search).get("demo") === "1") {
     settings = { ...settings, geminiSkipped: true };
     showGate();
@@ -491,7 +527,9 @@ export function mount(doc, hooks = {}) {
   }
   showRiddle();
   paintDevices();
-  paintState("idle");
+  const waveName = new URLSearchParams(location.search).get("wave");
+  paintState(waveName === "think" || waveName === "speak" || waveName === "listen" ? waveName : "idle");
+  if (waveName) avatar.setLevel(waveName === "speak" ? 0.9 : waveName === "listen" ? 0.7 : 0.2);
   tickClock();
   setInterval(tickClock, 1000);
   loadWeather();
@@ -501,5 +539,5 @@ export function mount(doc, hooks = {}) {
   });
   renderMemories();
 
-  return { toast, avatar, session };
+  return { toast, avatar, session, noteFault };
 }

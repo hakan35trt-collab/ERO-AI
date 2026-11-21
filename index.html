@@ -98,6 +98,8 @@
               <span id="pill-sub">Seninle konuşmaya hazırım...</span>
             </div>
           </div>
+          <p id="link-status" class="link-status">Hazır</p>
+          <button id="reconnect" type="button" hidden>Yeniden bağlan</button>
 
           <div class="controls">
             <button id="btn-key" type="button" aria-label="Yaz">⌨</button>
@@ -160,6 +162,7 @@
         <input id="set-gemini" type="password" autocomplete="off" placeholder="Boşsa yerleşik anahtar kullanılır" />
         <p id="gemini-note" class="hint"></p>
         <label class="check"><input id="set-wake" type="checkbox" /> Yalnızca “ERO” deyince uyan</label>
+        <label class="check"><input id="set-live" type="checkbox" /> Canlı konuşma (deneysel, kapalı kalsın)</label>
         <label class="check"><input id="set-home" type="checkbox" /> Home Assistant kullan</label>
         <label for="set-ha">Adres</label>
         <input id="set-ha" placeholder="http://192.168.1.20:8123" />

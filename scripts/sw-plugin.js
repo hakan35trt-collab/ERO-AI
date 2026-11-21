@@ -5,6 +5,7 @@ function walk(dir, prefix, out) {
   for (const name of fs.readdirSync(dir)) {
     const abs = path.join(dir, name);
     const rel = prefix ? `${prefix}/${name}` : name;
+    if (rel.split("/").includes("avatar")) continue;
     if (fs.statSync(abs).isDirectory()) walk(abs, rel, out);
     else if (name !== "sw.js") out.push(`./${rel}`);
   }
@@ -61,6 +62,22 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(async () => (await caches.match("./index.html")) || (await caches.match("index.html"))),
+    );
+    return;
+  }
+
+  const fresh = /\.(js|css|html|webmanifest)$/.test(url.pathname);
+  if (fresh) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }

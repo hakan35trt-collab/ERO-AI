@@ -29,6 +29,21 @@ startAndroidShell(document, {
   ask: (text) => app.session.ask(text),
 });
 
+if (new URLSearchParams(location.search).get("probe") === "1") {
+  window.__ero = {
+    ask: (text) => app.session.ask(text),
+    state: () => document.querySelector("#pill")?.dataset.state || "",
+  };
+}
+
+window.addEventListener("error", () => {
+  app.noteFault?.("Bir şey takıldı. Yeniden bağlan.");
+});
+window.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  app.noteFault?.("Bir şey takıldı. Yeniden bağlan.");
+});
+
 const params = new URLSearchParams(location.search);
 const splash = document.querySelector("#splash");
 if (splash) {

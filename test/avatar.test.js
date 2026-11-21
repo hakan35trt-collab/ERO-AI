@@ -17,7 +17,9 @@ test("sessizlikte ağız kapalı, yüksek enerjide açık hece", () => {
 
 test("Gemini sırası meşgul modellere düşer ve ses Charon", () => {
   assert.equal(TEXT_MODELS[0], "gemini-3.5-flash-lite");
-  assert.ok(TEXT_MODELS.includes("gemini-3.8-flash"));
+  assert.equal(TEXT_MODELS[1], "gemini-3.7-flash");
+  assert.ok(!TEXT_MODELS.includes("gemini-2.5-flash"));
+  assert.ok(!TEXT_MODELS.includes("gemini-3.8-flash"));
   assert.ok(LIVE_MODELS.includes("gemini-omni-flash-preview"));
   assert.ok(LIVE_MODELS.includes("gemini-omni-1.2-flash"));
   assert.deepEqual(TTS_MODELS, ["gemini-2.5-flash-preview-tts"]);

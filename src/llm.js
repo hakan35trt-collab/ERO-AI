@@ -260,7 +260,6 @@ export async function streamChat({ messages, settings = {}, onDelta, signal, onS
     const host = providerHost(provider);
     if (skippedHosts.has(host)) continue;
     const attempt = async () => {
-      onStatus?.("Düşünüyorum…");
       await runProvider(provider, messages, onDelta, signal);
       return { id: provider.id, label: provider.label, model: provider.model };
     };
@@ -276,7 +275,7 @@ export async function streamChat({ messages, settings = {}, onDelta, signal, onS
         if (Number(error.retryAfter || 0) > 15) skippedHosts.add(host);
         else {
           try {
-            await sleep(1200, signal);
+            await sleep(300, signal);
           } catch (abort) {
             throw abort;
           }

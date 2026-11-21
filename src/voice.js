@@ -13,11 +13,15 @@ export function chooseVoice(voices, voiceURI) {
   return list.find((voice) => /^tr\b/i.test(voice.lang || "")) || null;
 }
 
-function mobileMic() {
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+export const SILENCE_MS = 700;
+
+export function recognitionShouldRestart(code, wantListen) {
+  if (!wantListen) return false;
+  if (code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture") return false;
+  return true;
 }
 
-export function createVoice({ getSettings, onFinal, onInterim, onVolume, onViseme, onSpeakStart, onSpeakEnd, onError, onTtsFallback }) {
+export function createVoice({ getSettings, onFinal, onInterim, onVolume, onViseme, onSpeakStart, onSpeakEnd, onError, onTtsFallback, onBarge, getSpeaking }) {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let wantListen = false;
@@ -90,14 +94,18 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
       onError?.({ code: "unsupported", message: "Bu tarayıcı konuşmayı yazıya çeviremiyor." });
       return false;
     }
-    startLevel();
     if (!recognition) {
       recognition = new Recognition();
       recognition.lang = "tr-TR";
-      // Android Chrome often never sets isFinal while continuous stays open.
-      recognition.continuous = !mobileMic();
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
+      recognition.onaudiostart = () => onVolume?.(0.18);
+      recognition.onsoundstart = () => onVolume?.(0.36);
+      recognition.onspeechstart = () => {
+        onVolume?.(0.62);
+        if (getSpeaking?.()) onBarge?.();
+      };
       recognition.onresult = (event) => {
         let interim = "";
         let finalText = "";
@@ -109,7 +117,9 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
         const latest = (finalText || interim).trim();
         if (!latest) return;
         hypothesis = latest;
+        onVolume?.(0.74);
         onInterim?.(latest);
+        if (getSpeaking?.()) onBarge?.();
         clearTimeout(pauseTimer);
         if (finalText.trim()) {
           deliver(finalText);
@@ -122,13 +132,17 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
           } catch {
             /* yoksay */
           }
-        }, 420);
+        }, SILENCE_MS);
       };
       recognition.onerror = (event) => {
         const code = event.error || "error";
         if (code === "aborted" || code === "no-speech") return;
+        if (code === "network") {
+          onError?.({ code, message: "Ses ağı koptu. Yeniden deniyorum." });
+          return;
+        }
         onError?.({ code, message: messageFor(code) });
-        if (code === "not-allowed" || code === "service-not-allowed") wantListen = false;
+        if (!recognitionShouldRestart(code, true)) wantListen = false;
       };
       recognition.onend = () => {
         clearTimeout(pauseTimer);
@@ -141,7 +155,7 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
           } catch {
             /* zaten açık */
           }
-        }, 350);
+        }, 180);
       };
     }
     try {
@@ -212,7 +226,7 @@ export function createVoice({ getSettings, onFinal, onInterim, onVolume, onVisem
     const clean = String(text || "").trim();
     if (!clean) return;
     const settings = getSettings();
-    let rate = Number(settings.rate) || 1;
+    let rate = Number(settings.rate) || 1.05;
     let pitch = Number(settings.pitch) || 1;
     let gap = 50;
     if (style === "song") {

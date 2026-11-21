@@ -106,10 +106,14 @@ export async function localForecast({ latitude, longitude, name }) {
 }
 
 export async function research(question) {
-  const weather = await weatherNote(question);
-  const query = cleanQuery(question);
-  const [wiki, ddg] = await Promise.all([wikiNote(query), ddgNote(query)]);
-  return [weather, wiki, ddg].filter(Boolean).join("\n\n");
+  const work = (async () => {
+    const weather = await weatherNote(question);
+    const query = cleanQuery(question);
+    const [wiki, ddg] = await Promise.all([wikiNote(query), ddgNote(query)]);
+    return [weather, wiki, ddg].filter(Boolean).join("\n\n");
+  })();
+  const cap = new Promise((resolve) => setTimeout(() => resolve(""), 1500));
+  return Promise.race([work.catch(() => ""), cap]);
 }
 
 export function sourceLabels(notes) {
