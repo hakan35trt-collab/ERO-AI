@@ -1,0 +1,23 @@
+{
+  "name": "ero",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "predev": "node scripts/generate-icons.mjs",
+    "prebuild": "node scripts/generate-icons.mjs",
+    "dev": "vite --host 0.0.0.0 --port 8731 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8731 --strictPort",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.6",
+    "@fontsource/outfit": "^5.2.8"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.4",
+    "vite": "^6.3.5"
+  }
+}

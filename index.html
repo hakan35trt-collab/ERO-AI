@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05070e" />
+    <meta name="description" content="ERO, Türkçe konuşan kişisel yapay zekâ asistanı." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ERO" />
+    <title>ERO</title>
+    <link rel="icon" href="./icons/icon-32.png" sizes="32x32" />
+    <link rel="icon" href="./ero-mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+  </head>
+  <body>
+    <div id="splash" role="dialog" aria-label="ERO açılıyor">
+      <img src="./ero-mark.svg" alt="" width="168" height="168" />
+      <p class="splash-word">ERO</p>
+      <p class="splash-sub">Kişisel asistanın</p>
+      <noscript>ERO için JavaScript gerekir.</noscript>
+    </div>
+
+    <div id="app">
+      <header class="top">
+        <div class="brand">
+          <img src="./ero-mark.svg" alt="" width="36" height="36" />
+          <div>
+            <strong>ERO</strong>
+            <span>kişisel asistan</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="btn-home" type="button" aria-label="Akıllı ev">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>
+          </button>
+          <button id="btn-settings" type="button" aria-label="Ayarlar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5z"/><path d="M19.4 13a7.7 7.7 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a8 8 0 0 0-1.7-1L15 3h-4l-.5 2.9a8 8 0 0 0-1.7 1L6.5 6.4l-2 3.4L6.5 11a7.7 7.7 0 0 0 0 2l-2 1.2 2 3.4 2.3-.6a8 8 0 0 0 1.7 1L11 21h4l.5-2.9a8 8 0 0 0 1.7-1l2.3.6 2-3.4z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="install" class="install" hidden>
+        <p>ERO'yu ana ekrana ekle, uygulama gibi açılsın.</p>
+        <button id="install-go" type="button">Yükle</button>
+        <button id="install-no" type="button">Sonra</button>
+      </div>
+
+      <main>
+        <section class="stage" id="stage">
+          <canvas id="face" aria-label="ERO yüzü"></canvas>
+          <p id="status" aria-live="polite">Bekliyor</p>
+          <p id="substatus"></p>
+          <button id="mic" type="button">
+            <span class="mic-rings" aria-hidden="true"></span>
+            <svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8 21h8"/></svg>
+            <svg class="icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+            <span id="mic-label">Konuş</span>
+          </button>
+        </section>
+
+        <section class="chat">
+          <div id="support" class="support" hidden></div>
+          <div id="transcript" aria-live="polite"></div>
+          <form id="composer">
+            <label class="sr" for="text">İleti</label>
+            <input id="text" name="text" autocomplete="off" placeholder="Yaz veya mikrofona dokun" maxlength="2000" />
+            <button id="send" type="submit">Gönder</button>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <div id="toasts" aria-live="polite"></div>
+
+    <aside id="settings" class="sheet" hidden>
+      <div class="sheet-card">
+        <header class="sheet-head">
+          <h2>Ayarlar</h2>
+          <button type="button" data-close="settings" aria-label="Kapat">×</button>
+        </header>
+
+        <section>
+          <h3>Ses</h3>
+          <label>Ses
+            <select id="opt-voice"></select>
+          </label>
+          <p id="voice-note" class="hint"></p>
+          <label>Hız <input id="opt-rate" type="range" min="0.8" max="1.25" step="0.01" /></label>
+          <label>Perde <input id="opt-pitch" type="range" min="0.8" max="1.3" step="0.01" /></label>
+          <label class="check"><input id="opt-hands" type="checkbox" /> Eller serbest. “ERO” deyince dinler.</label>
+        </section>
+
+        <section>
+          <h3>Anılar</h3>
+          <form id="memory-form" class="row">
+            <input id="memory-text" placeholder="Yeni bir anı" maxlength="180" />
+            <button type="submit">Ekle</button>
+          </form>
+          <div id="memory-list"></div>
+          <button id="memory-clear" type="button" class="ghost">Anıların hepsini sil</button>
+        </section>
+
+        <section>
+          <h3>Daha hızlı model</h3>
+          <p class="hint">Boş bırakırsan ERO anahtarsız çalışır. İstersen OpenAI uyumlu bir adres, model ve anahtar yapıştır. Anahtar yalnız bu cihazda durur.</p>
+          <label>Adres <input id="opt-base" type="url" placeholder="https://api.groq.com/openai/v1" autocomplete="off" /></label>
+          <label>Model <input id="opt-model" placeholder="llama-3.3-70b-versatile" autocomplete="off" /></label>
+          <label>Anahtar <input id="opt-key" type="password" autocomplete="off" /></label>
+        </section>
+
+        <section>
+          <h3>Akıllı ev</h3>
+          <p class="hint">Modül hazır, varsayılan olarak kapalı. Simülasyon ekranda cihaz açar. Home Assistant için adres ve uzun ömürlü token gerekir. Tuya bağdaştırıcısı henüz bağlı değil.</p>
+          <label class="check"><input id="opt-home" type="checkbox" /> Bağlantıyı etkinleştir</label>
+          <label class="check"><input id="opt-demo" type="checkbox" /> Simülasyon</label>
+          <label>Bağdaştırıcı
+            <select id="opt-adapter">
+              <option value="homeassistant">Home Assistant</option>
+              <option value="tuya">Tuya (hazır, kapalı)</option>
+            </select>
+          </label>
+          <label>Adres <input id="opt-ha-url" type="url" placeholder="http://192.168.1.20:8123" autocomplete="off" /></label>
+          <label>Token <input id="opt-ha-token" type="password" autocomplete="off" /></label>
+          <button id="opt-ha-test" type="button" class="ghost">Bağlantıyı dene</button>
+          <p id="ha-result" class="hint"></p>
+        </section>
+
+        <section>
+          <button id="clear-chat" type="button" class="ghost">Sohbeti temizle</button>
+          <p id="build" class="hint"></p>
+          <p class="hint">iPhone'da Paylaş menüsünden Ana Ekrana Ekle. Android'de Chrome, yükle bandını ya da menüdeki yükle seçeneğini kullanır.</p>
+        </section>
+      </div>
+    </aside>
+
+    <aside id="home-panel" class="sheet" hidden>
+      <div class="sheet-card">
+        <header class="sheet-head">
+          <h2>Akıllı ev</h2>
+          <button type="button" data-close="home-panel" aria-label="Kapat">×</button>
+        </header>
+        <p id="home-note" class="hint"></p>
+        <div id="devices"></div>
+      </div>
+    </aside>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
